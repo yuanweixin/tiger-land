@@ -99,19 +99,18 @@ iterator lexer*(input: string): Token =
                 strBody = ""
             r".":
                 strBody.add input.substr(oldPos, pos-1)
-        # comment: 
-        #     r"/\*":
-        #         inc commentDepth 
-        #     r"\*/":
-        #         dec commentDepth 
-        #         if commentDepth == 0:
-        #             beginState(initial)
-        #     r".":
-        #         discard
-        r"\*\*":
-            # inc commentDepth 
-            # beginState(comment)
-            discard
+        comment: 
+            r"/\*":
+                inc commentDepth 
+            r"\*/":
+                dec commentDepth 
+                if commentDepth == 0:
+                    beginState(initial)
+            r".":
+                discard
+        r"/\*":
+            inc commentDepth 
+            beginState(comment)
         r"[0-9]+":
             yield Int(parseInt(input.substr(oldPos, pos-1)))
         r"[a-zA-Z][a-zA-Z_0-9]*":

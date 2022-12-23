@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "packages": {
+    "fusion": {
+      "version": "1.2",
+      "vcsRevision": "0b0a0273b8df860cd54e3fcca7bb4c617244ac77",
+      "url": "https://github.com/nim-lang/fusion",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "408bde8679bce63dfb6f424e107eb37c5eb31510"
+      }
+    },
+    "lexim": {
+      "version": "1.0",
+      "vcsRevision": "9beef9d45bfc54c497649956e6e6b304e578f46e",
+      "url": "https://github.com/yuanweixin/lexim",
+      "downloadMethod": "git",
+      "dependencies": [
+        "fusion"
+      ],
+      "checksums": {
+        "sha1": "0ce5ac3435a01ba37951b19d7bd83dd3e6514bb3"
+      }
+    }
+  }
+}
