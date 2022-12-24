@@ -13,14 +13,14 @@
     },
     "lexim": {
       "version": "1.0",
-      "vcsRevision": "9beef9d45bfc54c497649956e6e6b304e578f46e",
+      "vcsRevision": "8ce8673b2290e4e68dff4a53f9e78a18e3e1924e",
       "url": "https://github.com/yuanweixin/lexim",
       "downloadMethod": "git",
       "dependencies": [
         "fusion"
       ],
       "checksums": {
-        "sha1": "0ce5ac3435a01ba37951b19d7bd83dd3e6514bb3"
+        "sha1": "d71314c53721cf65d7a32f5ddd3be1b08e56c4e3"
       }
     }
   }
