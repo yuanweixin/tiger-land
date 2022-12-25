@@ -32,6 +32,17 @@ proc runTest(input: string, expected: seq[Token]) =
             for token in tigerTokenIter(input, lexState): token
     doAssert expected, actual, printDiff
 
+suite "comments":
+    test "basic comment":
+        let input = "1 /* I am a comment*/ b"
+        let expected = @[Int(1), Id("b")]
+        runTest(input, expected)
+
+    test "nested comment!":
+        let input = "1 /* /* /* /* */ */ */ */ b"
+        let expected = @[Int(1), Id("b")]
+        runTest(input, expected)
+
 suite "string":
     test "\n":
         let input = """"ho\nho\nho""""
