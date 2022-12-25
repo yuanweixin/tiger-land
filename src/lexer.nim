@@ -9,7 +9,7 @@ type TigerlexState* = object
 proc newLexState*() : TigerlexState = 
     result = TigerlexState(strBody: "", commentDepth: 0)
 
-match false,TigerlexState,Token,tigerTokenIter:
+genStringMatcher tigerTokenIter[TigerlexState,Token]:
     r"\n":
         discard 
     r"\s":
@@ -48,7 +48,7 @@ match false,TigerlexState,Token,tigerTokenIter:
         yield If()
     r"array":
         yield Array()
-    r":=":
+    r"\:=":
         yield Assign()
     r"\|":
         yield Or()
