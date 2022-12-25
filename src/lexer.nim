@@ -115,9 +115,11 @@ genStringMatcher tigerTokenIter[TigerlexState,Token]:
             lexState.strBody.add "\r"
         r"\\f":
             lexState.strBody.add "\f"
-        ## TODO remaining cases
-        ## \ddd single char with ascii coe ddd (3 dec digits)
-        ## \f...f\ where f...f stand for seq of 1 or more fmt chars (at least tab, space, newline, formfeed)
+        r"\\[0-9]{3,3}":
+            let i = parseInt(input.substr(oldPos+1, pos-1))
+            lexState.strBody.add $chr(i)
+        """\\(\t|\f|\n| )+\\""":
+            discard 
         r".":
             lexState.strBody.add input.substr(oldPos, pos-1)
     comment: 

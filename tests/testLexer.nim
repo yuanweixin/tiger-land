@@ -4,6 +4,7 @@ import std/unittest
 import tokens_util
 import experimental/diff
 import utils 
+import std/strutils
 
 proc printDiff(exp: seq[Token], act: seq[Token]) =
     var ie, ia = 0 
@@ -51,8 +52,16 @@ suite "string":
         let expected = @[String("h\re\br\f")]
         runTest(input, expected)
 
-    test r"\ddd":
-        discard
+    test r"\ddd embed all ascii characters":
+        var input = "\""
+        var echars : seq[char]
+        for i in 0..255:
+            input.add "\\" 
+            input.add intToStr(i,3)
+            echars.add chr(i)
+        input.add "\""
+        let expected = @[String(join(echars, ""))]
+        runTest(input, expected)
 
     test r"\":
         let input = """"hell\\o""""
@@ -64,8 +73,15 @@ suite "string":
         let expected = @[String("quote\"o")]
         runTest(input, expected)
 
-    test r"\f___f\":
-        discard 
+    test r"\f___f\, where f___f is seq of 1 or more fmt chars incl. at least space, tab, newline, formfeed, allow write long strings on more than 1 line, by writing \ at end of 1 line and at start of next":
+        var input : string 
+        input.add "\""
+        input.add "1 "
+        input.add "\\\t\f\n \\"
+        input.add " 2"
+        input.add "\""
+        let expected = @[String("1  2")]
+        runTest(input, expected)
 
 suite "merge.tig lex":
     let data : seq[(string, seq[Token])] = 
