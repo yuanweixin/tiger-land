@@ -105,15 +105,18 @@ genStringMatcher tigerTokenIter[TigerlexState,Token]:
             lexState.strBody.add "\t"
         r"\\n":
             lexState.strBody.add "\n"
-        r"\\": 
-            lexState.strBody.add "\\"
-        "\\\"":
+        """\\\"""":
             lexState.strBody.add "\""
+        r"\\\\":
+            lexState.strBody.add "\\"
+        r"\\b":
+            lexState.strBody.add "\b"
+        r"\\r":
+            lexState.strBody.add "\r"
+        r"\\f":
+            lexState.strBody.add "\f"
         ## TODO remaining cases
-        ## \^c where c is control char
         ## \ddd single char with ascii coe ddd (3 dec digits)
-        ## \" double quote
-        ## \\ backslash
         ## \f...f\ where f...f stand for seq of 1 or more fmt chars (at least tab, space, newline, formfeed)
         r".":
             lexState.strBody.add input.substr(oldPos, pos-1)

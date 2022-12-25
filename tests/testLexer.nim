@@ -25,6 +25,48 @@ proc printDiff(exp: seq[Token], act: seq[Token]) =
         ok = false 
     doAssert ok, "expected != actual, see above"
 
+proc runTest(input: string, expected: seq[Token]) = 
+    var lexState = newLexState()
+    let actual = collect(newSeq):
+            for token in tigerTokenIter(input, lexState): token
+    doAssert expected, actual, printDiff
+
+suite "string":
+    test "\n":
+        let input = """"ho\nho\nho""""
+        let expected = @[String("ho\nho\nho")]
+        runTest(input, expected)
+
+    test "\t":
+        let input = """"ho\tho\tho""""
+        let expected = @[String("ho\tho\tho")]
+        runTest(input, expected)
+
+    test r"\^c":
+        # just gonna use python's set of escape characters 
+        # \r carriage return 
+        # \b backspace
+        # \f form feed
+        let input = """"h\re\br\f""""
+        let expected = @[String("h\re\br\f")]
+        runTest(input, expected)
+
+    test r"\ddd":
+        discard
+
+    test r"\":
+        let input = """"hell\\o""""
+        let expected = @[String("hell\\o")]
+        runTest(input, expected)
+
+    test "\"":
+        let input = """"quote\"o""""
+        let expected = @[String("quote\"o")]
+        runTest(input, expected)
+
+    test r"\f___f\":
+        discard 
+
 suite "merge.tig lex":
     let data : seq[(string, seq[Token])] = 
         @[
@@ -104,10 +146,7 @@ suite "merge.tig lex":
 
     test "merge.tig":
         for (input, expected) in data:
-            var lexState = newLexState()
-            let actual = collect(newSeq):
-                for token in tigerTokenIter(input, lexState): token
-            doAssert expected, actual, printDiff
+            runTest(input, expected)
 
 suite "queens.tig":
     let data : seq[(string, seq[Token])] = @[
@@ -160,13 +199,4 @@ suite "queens.tig":
     ]
     test "queens.tig":
         for (input, expected) in data:
-            var lexState = newLexState()
-            let actual = collect(newSeq):
-                for token in tigerTokenIter(input, lexState): token
-            doAssert expected, actual, printDiff
-
-# lexState = newLexState()
-# input = readFile("tests/programs/queens.tig")
-# res = collect(newSeq):
-#     for token in tigerTokenIter(input, lexState): token
-# echo res
+            runTest(input, expected)
