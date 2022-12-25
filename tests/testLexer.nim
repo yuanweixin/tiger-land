@@ -111,43 +111,52 @@ suite "merge.tig lex":
 
 suite "queens.tig":
     let data : seq[(string, seq[Token])] = @[
-        ("""
-        /* A program to solve the 8-queens problem */
+        (
+            """
+            /* A program to solve the 8-queens problem */
 
-        let
-            var N := 8
+            let
+                var N := 8
 
-            type intArray = array of int
+                type intArray = array of int
 
-            var row := intArray [ N ] of 0
-            var col := intArray [ N ] of 0
-            var diag1 := intArray [N+N-1] of 0
-            var diag2 := intArray [N+N-1] of 0
-        """, @[Let, Var, Id("N"), Assign, Int(8), Type, Id("intArray"), Eq, Array, Of, Id("int"), Var, Id("row"), Assign, Id("intArray"), Lbrack, Id("N"), Rbrack, Of, Int(0), Var, Id("col"), Assign, Id("intArray"), Lbrack, Id("N"), Rbrack, Of, Int(0), Var, Id("diag1"), Assign, Id("intArray"), Lbrack, Id("N"), Plus, Id("N"), Minus, Int(1), Rbrack, Of, Int(0), Var, Id("diag2"), Assign, Id("intArray"), Lbrack, Id("N"), Plus, Id("N"), Minus, Int(1), Rbrack, Of, Int(0)]),
-        ("""
+                var row := intArray [ N ] of 0
+                var col := intArray [ N ] of 0
+                var diag1 := intArray [N+N-1] of 0
+                var diag2 := intArray [N+N-1] of 0
+            """, 
+            @[Let, Var, Id("N"), Assign, Int(8), Type, Id("intArray"), Eq, Array, Of, Id("int"), Var, Id("row"), Assign, Id("intArray"), Lbrack, Id("N"), Rbrack, Of, Int(0), Var, Id("col"), Assign, Id("intArray"), Lbrack, Id("N"), Rbrack, Of, Int(0), Var, Id("diag1"), Assign, Id("intArray"), Lbrack, Id("N"), Plus, Id("N"), Minus, Int(1), Rbrack, Of, Int(0), Var, Id("diag2"), Assign, Id("intArray"), Lbrack, Id("N"), Plus, Id("N"), Minus, Int(1), Rbrack, Of, Int(0)]
+        ),
+        (
+            """
             function printboard() =
             (for i := 0 to N-1
             do (for j := 0 to N-1 
                 do print(if col[i]=j then " O" else " .");
                 print("\n"));
                 print("\n"))
-        """, @[Function, Id("printboard"), Lparen, Rparen, Eq, Lparen, For, Id("i"), Assign, Int(0), To, Id("N"), Minus, Int(1), Do, Lparen, For, Id("j"), Assign, Int(0), To, Id("N"), Minus, Int(1), Do, Id("print"), Lparen, If, Id("col"), Lbrack, Id("i"), Rbrack, Eq, Id("j"), Then, String(" O"), Else, String(" ."), Rparen, Semicolon, Id("print"), Lparen, String("\n"), Rparen, Rparen, Semicolon, Id("print"), Lparen, String("\n"), Rparen, Rparen]),
-        # ("""
-        #     function try(c:int) = 
-        # ( /*  for i:= 0 to c do print("."); print("\n"); flush();*/
-        #     if c=N
-        #     then printboard()
-        #     else for r := 0 to N-1
-        #     do if row[r]=0 & diag1[r+c]=0 & diag2[r+7-c]=0
-        #             then (row[r]:=1; diag1[r+c]:=1; diag2[r+7-c]:=1;
-        #                 col[c]:=r;
-        #                     try(c+1);
-        #             row[r]:=0; diag1[r+c]:=0; diag2[r+7-c]:=0)
+            """, 
+            @[Function, Id("printboard"), Lparen, Rparen, Eq, Lparen, For, Id("i"), Assign, Int(0), To, Id("N"), Minus, Int(1), Do, Lparen, For, Id("j"), Assign, Int(0), To, Id("N"), Minus, Int(1), Do, Id("print"), Lparen, If, Id("col"), Lbrack, Id("i"), Rbrack, Eq, Id("j"), Then, String(" O"), Else, String(" ."), Rparen, Semicolon, Id("print"), Lparen, String("\n"), Rparen, Rparen, Semicolon, Id("print"), Lparen, String("\n"), Rparen, Rparen]
+        ),
+        (
+            """
+                function try(c:int) = 
+            ( /*  for i:= 0 to c do print("."); print("\n"); flush();*/
+                if c=N
+                then printboard()
+                else for r := 0 to N-1
+                do if row[r]=0 & diag1[r+c]=0 & diag2[r+7-c]=0
+                        then (row[r]:=1; diag1[r+c]:=1; diag2[r+7-c]:=1;
+                            col[c]:=r;
+                                try(c+1);
+                        row[r]:=0; diag1[r+c]:=0; diag2[r+7-c]:=0)
 
-        # )
-        # in try(0)
-        # end
-        # """, @[])
+            )
+            in try(0)
+            end
+            """, 
+            @[Function, Id("try"), Lparen, Id("c"), Colon, Id("int"), Rparen, Eq, Lparen, If, Id("c"), Eq, Id("N"), Then, Id("printboard"), Lparen, Rparen, Else, For, Id("r"), Assign, Int(0), To, Id("N"), Minus, Int(1), Do, If, Id("row"), Lbrack, Id("r"), Rbrack, Eq, Int(0), And, Id("diag1"), Lbrack, Id("r"), Plus, Id("c"), Rbrack, Eq, Int(0), And, Id("diag2"), Lbrack, Id("r"), Plus, Int(7), Minus, Id("c"), Rbrack, Eq, Int(0), Then, Lparen, Id("row"), Lbrack, Id("r"), Rbrack, Assign, Int(1), Semicolon, Id("diag1"), Lbrack, Id("r"), Plus, Id("c"), Rbrack, Assign, Int(1), Semicolon, Id("diag2"), Lbrack, Id("r"), Plus, Int(7), Minus, Id("c"), Rbrack, Assign, Int(1), Semicolon, Id("col"), Lbrack, Id("c"), Rbrack, Assign, Id("r"), Semicolon, Id("try"), Lparen, Id("c"), Plus, Int(1), Rparen, Semicolon, Id("row"), Lbrack, Id("r"), Rbrack, Assign, Int(0), Semicolon, Id("diag1"), Lbrack, Id("r"), Plus, Id("c"), Rbrack, Assign, Int(0), Semicolon, Id("diag2"), Lbrack, Id("r"), Plus, Int(7), Minus, Id("c"), Rbrack, Assign, Int(0), Rparen, Rparen, In, Id("try"), Lparen, Int(0), Rparen, End]
+        )
     ]
     test "queens.tig":
         for (input, expected) in data:
