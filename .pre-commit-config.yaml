@@ -1,0 +1,5 @@
+repos:
+-   repo: https://github.com/yuanweixin/pre-commit-nim
+    rev: 97798b9
+    hooks:
+    -   id: nimpretty
