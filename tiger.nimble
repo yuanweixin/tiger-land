@@ -11,4 +11,5 @@ bin           = @["tiger"]
 # Dependencies
 
 requires "nim >= 1.6.8"
-requires "https://github.com/yuanweixin/lexim"
+requires "https://github.com/yuanweixin/lexim >= 1.0.0"
+requires "https://github.com/yuanweixin/nimyacc >= 1.0.0"

@@ -22,6 +22,41 @@
       "checksums": {
         "sha1": "d71314c53721cf65d7a32f5ddd3be1b08e56c4e3"
       }
+    },
+    "patty": {
+      "version": "0.3.4",
+      "vcsRevision": "4bed5b8c05ad9b46ac67d848b64c0d77e4dab190",
+      "url": "https://github.com/andreaferretti/patty",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "ffb2ee70b07172babb2df9ef19a7d31a8c462d0a"
+      }
+    },
+    "dotted": {
+      "version": "1.0.2",
+      "vcsRevision": "fa3673a3f227cfd2e0ae1fdfef025d00030aaffc",
+      "url": "https://github.com/yuanweixin/dotted",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "1373cd452a21627b60682dfd08d5b6d4aade589d"
+      }
+    },
+    "nimyacc": {
+      "version": "1.0.0",
+      "vcsRevision": "6f1fca5dc5fd35aa929ac705d92d27b2b9ed09fa",
+      "url": "https://github.com/yuanweixin/nimyacc",
+      "downloadMethod": "git",
+      "dependencies": [
+        "patty",
+        "fusion",
+        "dotted",
+        "lexim"
+      ],
+      "checksums": {
+        "sha1": "a10c0f6e6ad39f0c748eea2ca986514076ed2398"
+      }
     }
   }
 }
