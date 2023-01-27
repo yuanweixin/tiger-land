@@ -7,15 +7,19 @@ type
         nextIdx: int
 
 proc newSymbolSet*(): SymbolSet =
+    # initiates a new set of symbols for use in compiler.
+    # only one symbol set should be created per invocation of tiger.
     result = SymbolSet(created: initTable[string, int](), nextIdx: 0)
+
+var symset = newSymbolSet()
 
 func name*(s: Symbol): string =
     ## extracts the name part of the symbol.
     result = s[0]
 
-proc symbol*(symset: var SymbolSet, name: string): Symbol =
-    ## creates a new symbol with the given string.
-    ## the existing symbol is returned.
+proc symbol*(name: string): Symbol =
+    ## Creates a new symbol with the given string in the global symbol set if it does not exist.
+    ## If a symbol with the given name exists, it is returned.
     if name in symset.created:
         result = (name, symset.created[name])
     else:
@@ -24,11 +28,9 @@ proc symbol*(symset: var SymbolSet, name: string): Symbol =
         symset.created[name] = idx
         result = (name, idx)
 
-
-
 const markerSym: Symbol = ("", -1) # marks the beginning of scope.
 type
-    Symtab*[T] = object
+    Symtab*[T] = object ## symbol table object. interact with it using the procs.
         tbl: Table[Symbol, seq[T]]
         stack: seq[Symbol]
 
@@ -36,6 +38,7 @@ proc newSymtab*[T](): Symtab[T] =
     result = Symtab(tbl: initTable[Symbol, seq[T]](), stack: @[])
 
 proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
+    ## adds the given symbol to the symtab.
     if sym notin symtab.created:
         symtab.created[sym] = @[binding]
     else:
@@ -43,15 +46,18 @@ proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
     symtab.stack.add sym
 
 proc look*[T](symtab: var Symtab, sym: Symbol): Option[T] =
+    ## locate the last binding of the given symbol in the symtab.
     if sym in symtab.created:
         let bindings = symtab.created[sym]
         return some[T]bindings[bindings.high]
     return none[T]()
 
 proc beginScope*(symtab: var Symtab) =
+    ## this must be called at start of scope before adding symbols
     symtab.stack.add markerSym
 
 proc endScope*(symtab: var Symtab) =
+    ## this must be called at the end of a scope to clean up that scope's symbols
     while symtab.stack[symtab.stack.high] != markerSym:
         let sym = symtab.stack.pop
         symtab[sym].pop()

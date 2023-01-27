@@ -57,6 +57,16 @@
       "checksums": {
         "sha1": "a10c0f6e6ad39f0c748eea2ca986514076ed2398"
       }
+    },
+    "print": {
+      "version": "1.0.2",
+      "vcsRevision": "fb09637d6ebd6416b322a2b9bb95dd513040dea7",
+      "url": "https://github.com/treeform/print",
+      "downloadMethod": "git",
+      "dependencies": [],
+      "checksums": {
+        "sha1": "b2d54fa3fa47a11a42c94f9d05f1057fc5ff16a3"
+      }
     }
   }
 }

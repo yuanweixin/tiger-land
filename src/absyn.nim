@@ -2,23 +2,24 @@ import symbol
 import options
 
 type
-    pos = int
+    pos* = int
 
     VarKind* = enum
         SimpleVar
         FieldVar
         SubscriptVar
-    Var* = ref VarObj
+    VarR* = ref VarObj
     VarObj* = object
         case kind*: VarKind
         of SimpleVar:
             svs*: Symbol
             svp*: pos
         of FieldVar:
+            fvar*: VarR
             fvs*: Symbol
             fvp*: pos
         of SubscriptVar:
-            subs*: Symbol
+            subvar*: VarR
             exp*: Exp
             pos*: pos
 
@@ -42,7 +43,7 @@ type
     ExpObj* = object
         case kind*: ExpKind
         of VarExp:
-            v*: Var
+            v*: VarR
         of NilExp:
             discard
         of IntExp:
@@ -66,7 +67,7 @@ type
         of SeqExp:
             eplist*: seq[(Exp, pos)]
         of AssignExp:
-            avar*: Var
+            avar*: VarR
             aexp*: Exp
             apos*: pos
         of IfExp:
@@ -76,7 +77,7 @@ type
             ifpos*: pos
         of WhileExp:
             wtest*: Exp
-            body*: Exp
+            wbody*: Exp
             wpos*: pos
         of ForExp:
             fvar*: Symbol
@@ -95,7 +96,7 @@ type
             arrtyp*: Symbol
             size*: Exp
             init*: Exp
-            arrposv: pos
+            arrpos*: pos
     DecKind* = enum
         FunctionDec
         VarDec
@@ -112,9 +113,11 @@ type
             init*: Exp
             vdpos*: pos
         of TypeDec:
-            tdname*: Symbol
-            tdty*: Ty
-            tdpos*: pos
+            decs*: seq[TyDec]
+    TyDec* = object
+        tdname*: Symbol
+        tdty*: Ty
+        tdpos*: pos
     TyKind* = enum
         NameTy
         RecordTy
@@ -124,7 +127,7 @@ type
         case kind*: TyKind
         of NameTy:
             nts*: Symbol
-            ntposv: pos
+            ntpos*: pos
         of RecordTy:
             rtyfields*: seq[Field]
         of ArrayTy:
@@ -156,3 +159,23 @@ type
         result*: Option[(Symbol, pos)]
         body*: Exp
         pos*: pos
+
+# Some toString's because $ isn't happy with ref types.
+proc `$`*(e: Exp): string =
+    result = $e[]
+
+proc `$`*(d: Dec): string =
+    result = $d[]
+
+proc `$`*(ty: Ty): string =
+    result = $ty[]
+
+proc `$`*(f: Field): string =
+    result = $f[]
+
+proc `$`*(f: FunDec): string =
+    result = $f[]
+
+proc `$`*(v: VarR): string =
+    result = $v[]
+
