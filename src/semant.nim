@@ -102,27 +102,30 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         return (42, tyv)
     of StringExp:
         return (42, Type(kind: StringT))
-    # of CallExp:
-    #     let fentryOpt = tenv.look e.fun
-    #     if fentryOpt.isNone:
-    #         error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
-    #     elif fentryOpt.get.kind != FunEntry:
-    #         error hasErr, e.cp, e.fun.name " is not a function!"
-    #         if e.args.len != fentry.get.formals.len:
-    #             error hasErr, e.cp, e.fun.name, " has ", fentry.get.formals.len, " arguments but is called with ", e.args.len
-    #         for i in 0..e.args.high:
-    #             let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
-    #             if tyargi != fentry.get.formals[i]:
-    #                 error hasErr, e.cp, e.fun.name, " call expects type ", fentry.get.formals[i], " at argument ", i+1, " but got ", tyargi
-    #         # TODO move to funcdec checking.
-    #         # venv.beginScope()
-    #         # for formal in fentry.get.formals:
-    #         #     when defined(tigerdevel):
-    #         #         doAssert formal.kind==NameT, "type checker bug, function args should always have type NameT"
-    #         #         doAssert formal.tyopt.isSome, "type checker bug, function param does not have a type."
-    #             # venv.enter formal.s, EnvEntry(kind: VarEntry, ty: formal.tyopt.get)
-    #         # venv.endScope()
-    #         return (42, fentryOpt.get.result)
+    of CallExp:
+        let fentryOpt = tenv.look e.fun
+        if fentryOpt.isNone:
+            error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
+        elif fentryOpt.get.kind != FunEntry:
+            error hasErr, e.cp, e.fun.name " is not a function!"
+            if e.args.len != fentry.get.formals.len:
+                error hasErr, e.cp, e.fun.name, " has ", fentry.get.formals.len,
+                        " arguments but is called with ", e.args.len
+            for i in 0..e.args.high:
+                let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
+                if tyargi != fentry.get.formals[i]:
+                    error hasErr, e.cp, e.fun.name, " call expects type ",
+                            fentry.get.formals[i], " at argument ", i+1,
+                            " but got ", tyargi
+            # TODO move to funcdec checking.
+            # venv.beginScope()
+            # for formal in fentry.get.formals:
+            #     when defined(tigerdevel):
+            #         doAssert formal.kind==NameT, "type checker bug, function args should always have type NameT"
+            #         doAssert formal.tyopt.isSome, "type checker bug, function param does not have a type."
+                # venv.enter formal.s, EnvEntry(kind: VarEntry, ty: formal.tyopt.get)
+            # venv.endScope()
+            return (42, fentryOpt.get.result)
     # of FunEntry:
     #     formals*: seq[Type]
     #     result*: Type
