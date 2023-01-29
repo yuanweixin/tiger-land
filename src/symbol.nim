@@ -61,6 +61,6 @@ proc endScope*[T](symtab: var Symtab[T]) =
     ## this must be called at the end of a scope to clean up that scope's symbols
     while symtab.stack[^1] != markerSym:
         let sym = symtab.stack.pop
-        symtab.tbl[sym].pop()
-    symtab.stack.pop
+        discard symtab.tbl[sym].pop()
+    discard symtab.stack.pop
 

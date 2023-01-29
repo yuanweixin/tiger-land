@@ -2,6 +2,7 @@ import absyn
 import options
 import symbol
 import translate
+import sets
 
 var typeTagCounter = 0
 
@@ -23,7 +24,7 @@ type TypeKind* = enum
     ErrorT # returned when type checking fails
 
            # This is the type representation used by the type checker.
-type Type* = object
+type Type* = ref object
     case kind*: TypeKind
     of RecordT:
         symTy*: seq[(Symbol, Type)]
@@ -36,6 +37,9 @@ type Type* = object
         tyopt*: Option[Type]
     of NilT, IntT, StringT, UnitT, ErrorT:
         discard
+
+proc `$`(x: Type): string =
+    return $x[]
 
 type
     EnvEntryKind* = enum
@@ -63,15 +67,16 @@ type VEnv = SymTab[EnvEntry]
 type ExpTy = (TranslatedExp, Type)
 
 # TODO fill us
-var baseTEnv: var TEnv
-var baseVEnv: var VEnv
+var baseTEnv: TEnv
+var baseVEnv: VEnv
 
-var todo: int = static:
-    42
 
 proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
     echo pos, " ", msg
+
+proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+        e: absyn.Exp): ExpTy
 
 proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         v: absyn.VarR): ExpTy =
@@ -81,18 +86,17 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         if tyOpt.isNone:
             error hasErr, v.svp, "use of undeclared variable."
             raise newException(Exception, "todo return some error type")
-        return (42, tyOpt.get)
+        return (42, tyOpt.get.ty)
     of FieldVar: # id.id
         let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar)
         if tyLhs.kind != RecordT:
             error hasErr, v.fvp, "tried to access field of a non-record type"
         else:
-            var found = False
-            for sym, symty in tyLhs.symTy:
+            for (sym, symty) in tyLhs.symTy:
                 if sym == v.fvs:
                     return (42, symty)
             error hasErr, v.fvp, "Field ", v.fvs.name,
-                    " is not part of record ", tyLhs.name
+                    " is not part of record ", tyLhs
         raise newException(Exception, "todo return error type")
     of SubscriptVar:
         let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar)
@@ -108,6 +112,8 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
 
 ## TODO gonna write it with global error var, and pretend this is first site of type
 ## error, and see what happens.
+
+proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec)
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         e: absyn.Exp): ExpTy =
@@ -146,48 +152,48 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
     of StringExp:
         return (42, Type(kind: StringT))
     of CallExp:
-        let fentryOpt = tenv.look e.fun
+        let fentryOpt = venv.look e.fun
         if fentryOpt.isNone:
             error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
-
         elif fentryOpt.get.kind != FunEntry:
             error hasErr, e.cp, e.fun.name, " is not a function!"
         else:
-            if e.args.len != fentry.get.formals.len:
-                error hasErr, e.cp, e.fun.name, " has ", fentry.get.formals.len,
-                        " arguments but is called with ", e.args.len
+            if e.args.len != fentryOpt.get.formals.len:
+                error hasErr, e.cp, e.fun.name, " has ",
+                        fentryOpt.get.formals.len,
+                                " arguments but is called with ", e.args.len
             for i in 0..e.args.high:
                 let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
-                if tyargi != fentry.get.formals[i]:
+                if tyargi != fentryOpt.get.formals[i]:
                     error hasErr, e.cp, e.fun.name, " call expects type ",
-                            fentry.get.formals[i], " at argument ", i+1,
+                            fentryOpt.get.formals[i], " at argument ", i+1,
                             " but got ", tyargi
             return (42, fentryOpt.get.result)
     of RecordExp:
-        let recEntryOpt = tenv.look e.rectyp
+        let recEntryOpt = venv.look e.rectyp
         if recEntryOpt.isNone:
-            error hasError, e.rpos, e.rectyp.name, " has not been declared"
+            error hasErr, e.rpos, e.rectyp.name, " has not been declared"
         elif recEntryOpt.get.kind != VarEntry or recEntryOpt.get.ty.kind != RecordT:
-            error hasError, e.rpos, e.rectyp.name, " is not a record type"
+            error hasErr, e.rpos, e.rectyp.name, " is not a record type"
         else:
             let expRecTy = recEntryOpt.get.ty
             if expRecTy.symTy.len != e.fields.len:
-                error hasError, e.rpos, e.rectyp.name, " does not have same fields as the ones given "
+                error hasErr, e.rpos, e.rectyp.name, " does not have same fields as the ones given "
             else:
-                for sym, exp, pos in e.fields:
-                    for symInTy, typExpected in expRecTy.symTy:
+                for (sym, exp, pos) in e.fields:
+                    for (symInTy, typExpected) in expRecTy.symTy:
                         if sym == symInTy:
                             let (_, tyActual) = transExp(hasErr, venv, tenv, exp)
                             if typExpected != tyActual:
-                                error hasError, pos, sym.name,
+                                error hasErr, pos, sym.name,
                                         " is expected to have type ",
-                                        tyExpected, " but got ", tyActual
+                                        typExpected, " but got ", tyActual
             return (42, expRecTy)
         raise newException(Exception, "todo handle when can't return a type")
     of SeqExp:
         var i = 0
         while i < e.eplist.len:
-            let (_, tyExp) = transExp(hasErr, venv, tenv, exp)
+            let (_, tyExp) = transExp(hasErr, venv, tenv, e.eplist[i][0])
             inc i
             if i == e.eplist.len:
                 return (42, tyExp)
@@ -219,7 +225,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         return (42, tythen)
     of WhileExp:
         let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest)
-        if tytest.kcalind != IntT:
+        if tytest.kind != IntT:
             error hasErr, e.wpos, "while condition must be of type integer"
         let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody)
         if tybody.kind != UnitT:
@@ -233,8 +239,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         else:
             venv.beginScope()
             # the spec says the index of for loop cannot be assigned to.
-            venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(kind: IntT,
-                    assignable: false)))
+            venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(kind: IntT),
+                    assignable: false))
             let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody)
             if tyfbody.kind != UnitT:
                 error hasErr, e.fpos, "for body must not produce a value"
@@ -258,10 +264,10 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         return (42, tyExp)
     of ArrayExp: # Id Lbrack exp Rbrack Of exp:
         # is this array type declared?
-        let aty = tenv.look e.arrtyp
-        if aty.isNone:
+        let atyOpt = tenv.look e.arrtyp
+        if atyOpt.isNone:
             error hasErr, e.arrpos, "trying to use an undeclared array type ", e.arrtyp.name
-        elif ty.get.kind != ArrayT:
+        elif atyOpt.get.kind != ArrayT:
             error hasErr, e.arrpos, e.arrtyp.name, " is not array type!"
         # check the size and initial values.
         let (_, tysize) = transExp(hasErr, venv, tenv, e.size)
@@ -269,10 +275,10 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             error hasErr, e.arrpos, "must pass integer for array size"
         let (_, tyinit) = transExp(hasErr, venv, tenv, e.init)
         # the initializer type must match the array's element type.
-        if tyinit.kind != aty.ty:
+        if tyinit != atyOpt.get:
             error hasErr, e.arrpos, "array initializer type is ", tyinit.kind,
-                    " but array is declared with type ", aty.ty
-        return (42, aty.ty)
+                    " but array is declared with type ", atyOpt.get
+        return (42, atyOpt.get)
 
 proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
     ## translates the type expressions as found in ast to digsted type
@@ -285,13 +291,13 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
             error hasErr, ty.ntpos, ty.nts.name, " is not declared"
             raise newException(Exception, "todo return error type")
         else:
-            return Type(kind: NameT, s: ty.nts, tyopt = tyOpt)
+            return Type(kind: NameT, s: ty.nts, tyopt: tyOpt)
     of ArrayTy: # Array of Id
         let tyOpt = tenv.look ty.arrs
         if tyOpt.isNone:
             error hasErr, ty.arrpos, ty.arrs.name, " is not declared and hence is invalid for use as array element"
             raise newException(Exception, "todo return error type")
-        return (42, Type(kind: ArrayT, ty: tyOpt.get, att: newTypeTag()))
+        return Type(kind: ArrayT, ty: tyOpt.get, att: newTypeTag())
     of RecordTy: # Lbrace fields Rbrace
         # no duplicate names.
         var seen: HashSet[Symbol]
@@ -309,14 +315,14 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
                     raise newException(Exception, "todo return error type")
                 else:
                     symTyp.add (field.name, tyOpt.get)
-        return (42, Type(kind: RecordT, symTy: symTyp, rtt: newTypeTag()))
+        return Type(kind: RecordT, symTy: symTyp, rtt: newTypeTag())
 
 proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
     case d.kind
     of TypeDec: # type id eq ty
         for dec in d.decs:
             # TODO error handling?
-            let ty = transTy(hasErr, venv, tenv, dec.tdty)
+            let ty = transTy(hasErr, tenv, dec.tdty)
             tenv.enter dec.tdname, ty
     of FunctionDec: # Function Id Lparen fields Rparen type_opt Eq exp
         # TODO add in the recursive defs by doing another pass.
@@ -348,15 +354,14 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
             var formals: seq[Type]
             for p in params:
                 formals.add p.tyopt.get
-            let funentry = EnvEntry(kind: FunEntry, formals = formals,
-                    result = retTy)
+            let funentry = EnvEntry(kind: FunEntry, formals: formals, result: retTy)
 
             venv.enter fundec.name, funentry
             # inject the function's params as VarEntry prior to type checking body.
             venv.beginScope()
             for p in params:
                 let varEntry = EnvEntry(kind: VarEntry, ty: p.tyopt.get)
-                venv.enter s, varEntry
+                venv.enter p.s, varEntry
             let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body)
             if retTy != tyRes:
                 error hasErr, fundec.pos, "expected return type of ", retTy,
@@ -366,14 +371,15 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
     of VarDec: # Var Id type_opt Assign exp:
         let (_, tyExp) = transExp(hasErr, venv, tenv, d.init)
         if d.vdtyp.isSome:
-            let retTypeSym, pos = d.vdtyp.get
+            let (retTypeSym, pos) = d.vdtyp.get
             let retTyOpt = tenv.look retTypeSym
             if retTyOpt.isNone:
                 error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
             elif tyExp != retTyOpt.get:
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
-        venv.enter d.vdname, tyExp
+        let varEntry = EnvEntry(kind: VarEntry, ty: tyExp)
+        venv.enter d.vdname, varEntry
 
 
 proc transProg*(ast: Exp) =
