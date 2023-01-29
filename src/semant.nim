@@ -26,7 +26,6 @@ type TypeKind* = enum
 type Type* = object
     case kind*: TypeKind
     of RecordT:
-        name*: string
         symTy*: seq[(Symbol, Type)]
         rtt*: TypeTag
     of ArrayT:
@@ -35,7 +34,7 @@ type Type* = object
     of NameT:
         s*: Symbol
         tyopt*: Option[Type]
-    of NilT, IntT, StringT, UnitT:
+    of NilT, IntT, StringT, UnitT, ErrorT:
         discard
 
 type
@@ -51,6 +50,13 @@ type
             formals*: seq[Type]
             result*: Type
 
+# separate namespaces for type declaration vs var/func decls
+# to handle cases like this:
+# let type a = int
+#      var a:a := 5
+#      var b:b := 5
+#   in b+a
+# end
 type TEnv = SymTab[Type]
 type VEnv = SymTab[EnvEntry]
 
@@ -59,6 +65,9 @@ type ExpTy = (TranslatedExp, Type)
 # TODO fill us
 var baseTEnv: var TEnv
 var baseVEnv: var VEnv
+
+var todo: int = static:
+    42
 
 proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
@@ -153,14 +162,6 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     error hasErr, e.cp, e.fun.name, " call expects type ",
                             fentry.get.formals[i], " at argument ", i+1,
                             " but got ", tyargi
-            # TODO move to funcdec checking.
-            # venv.beginScope()
-            # for formal in fentry.get.formals:
-            #     when defined(tigerdevel):
-            #         doAssert formal.kind==NameT, "type checker bug, function args should always have type NameT"
-            #         doAssert formal.tyopt.isSome, "type checker bug, function param does not have a type."
-                # venv.enter formal.s, EnvEntry(kind: VarEntry, ty: formal.tyopt.get)
-            # venv.endScope()
             return (42, fentryOpt.get.result)
     of RecordExp:
         let recEntryOpt = tenv.look e.rectyp
@@ -245,8 +246,16 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         # TODO fix this in part b.
         return (42, Type(kind: UnitT))
     of LetExp:
-        # TODO
-        return (42, Type(kind: StringT))
+        tenv.beginScope
+        venv.beginScope
+        for dec in e.decs:
+            # TODO this probably should indicate error, so
+            # that type checking can be stopped if decl doesn't check out.
+            transDec(hasErr, venv, tenv, dec)
+        let (_, tyExp) = transExp(hasErr, venv, tenv, e.letbody)
+        tenv.endScope
+        venv.endScope
+        return (42, tyExp)
     of ArrayExp: # Id Lbrack exp Rbrack Of exp:
         # is this array type declared?
         let aty = tenv.look e.arrtyp
@@ -265,14 +274,107 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     " but array is declared with type ", aty.ty
         return (42, aty.ty)
 
-proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
-    discard
-
-proc transTy*(tenv: var TEnv, ty: absyn.Ty): Type =
+proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
     ## translates the type expressions as found in ast to digsted type
     ## description that will be placed into the type environment. it maps
     ## absyn.Ty into semant.Type.
-    discard
+    case ty.kind
+    of NameTy: # Id
+        let tyOpt = tenv.look ty.nts
+        if tyOpt.isNone:
+            error hasErr, ty.ntpos, ty.nts.name, " is not declared"
+            raise newException(Exception, "todo return error type")
+        else:
+            return Type(kind: NameT, s: ty.nts, tyopt = tyOpt)
+    of ArrayTy: # Array of Id
+        let tyOpt = tenv.look ty.arrs
+        if tyOpt.isNone:
+            error hasErr, ty.arrpos, ty.arrs.name, " is not declared and hence is invalid for use as array element"
+            raise newException(Exception, "todo return error type")
+        return (42, Type(kind: ArrayT, ty: tyOpt.get, att: newTypeTag()))
+    of RecordTy: # Lbrace fields Rbrace
+        # no duplicate names.
+        var seen: HashSet[Symbol]
+        var symTyp: seq[(Symbol, Type)]
+        for field in ty.rtyfields:
+            if field.name in seen:
+                error hasErr, field.pos,
+                        "duplicate declaration of record field ", field.name
+                raise newException(Exception, "todo return error type")
+            else:
+                seen.incl field.name
+                let tyOpt = tenv.look field.typ
+                if tyOpt.isNone:
+                    error hasErr, field.pos, "undeclared type ", field.typ.name, " used in record, declare it first"
+                    raise newException(Exception, "todo return error type")
+                else:
+                    symTyp.add (field.name, tyOpt.get)
+        return (42, Type(kind: RecordT, symTy: symTyp, rtt: newTypeTag()))
+
+proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
+    case d.kind
+    of TypeDec: # type id eq ty
+        for dec in d.decs:
+            # TODO error handling?
+            let ty = transTy(hasErr, venv, tenv, dec.tdty)
+            tenv.enter dec.tdname, ty
+    of FunctionDec: # Function Id Lparen fields Rparen type_opt Eq exp
+        # TODO add in the recursive defs by doing another pass.
+        for fundec in d.fundecs:
+            let retTy =
+                if fundec.result.isNone:
+                    Type(kind: UnitT)
+                else:
+                    let (ressym, respos) = fundec.result.get
+                    let restyOpt = tenv.look ressym
+                    if restyOpt.isNone:
+                        error hasErr, respos, ressym.name, " is not a valid type"
+                        raise newException(Exception, "todo return error type")
+                    restyOpt.get
+
+            # extract the NameT types from the params.
+            # the ty info is used to construct the FunEntry.
+            # the (name, ty) is injected into the venv prior to body type check.
+            var params: seq[Type]
+            for field in fundec.params:
+                let fieldTyOpt = tenv.look field.typ
+                if fieldTyOpt.isNone:
+                    error hasErr, field.pos, field.typ.name, " used in function declaration is not a valid type"
+                    raise newException(Exception, "todo")
+                else:
+                    params.add Type(kind: NameT, s: field.name,
+                            tyopt: fieldTyOpt)
+
+            var formals: seq[Type]
+            for p in params:
+                formals.add p.tyopt.get
+            let funentry = EnvEntry(kind: FunEntry, formals = formals,
+                    result = retTy)
+
+            venv.enter fundec.name, funentry
+            # inject the function's params as VarEntry prior to type checking body.
+            venv.beginScope()
+            for p in params:
+                let varEntry = EnvEntry(kind: VarEntry, ty: p.tyopt.get)
+                venv.enter s, varEntry
+            let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body)
+            if retTy != tyRes:
+                error hasErr, fundec.pos, "expected return type of ", retTy,
+                        " for function but got ", tyRes
+                raise newException(Exception, "todo return error type")
+            venv.endScope()
+    of VarDec: # Var Id type_opt Assign exp:
+        let (_, tyExp) = transExp(hasErr, venv, tenv, d.init)
+        if d.vdtyp.isSome:
+            let retTypeSym, pos = d.vdtyp.get
+            let retTyOpt = tenv.look retTypeSym
+            if retTyOpt.isNone:
+                error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
+            elif tyExp != retTyOpt.get:
+                error hasErr, pos, "Return type of ", retTyOpt.get,
+                        " does not match actual type of initializer, ", tyExp
+        venv.enter d.vdname, tyExp
+
 
 proc transProg*(ast: Exp) =
     discard
