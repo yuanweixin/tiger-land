@@ -39,17 +39,17 @@ proc newSymtab*[T](): Symtab[T] =
 
 proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
     ## adds the given symbol to the symtab.
-    if sym notin symtab.created:
-        symtab.created[sym] = @[binding]
+    if sym notin symtab.tbl:
+        symtab.tbl[sym] = @[binding]
     else:
-        symtab.created[sym].add binding
+        symtab.tbl[sym].add binding
     symtab.stack.add sym
 
 proc look*[T](symtab: var Symtab, sym: Symbol): Option[T] =
     ## locate the last binding of the given symbol in the symtab.
-    if sym in symtab.created:
-        let bindings = symtab.created[sym]
-        return some[T]bindings[bindings.high]
+    if sym in symtab.tbl:
+        let bindings = symtab.tbl[sym]
+        return some[T](bindings[^1])
     return none[T]()
 
 proc beginScope*(symtab: var Symtab) =
@@ -58,8 +58,8 @@ proc beginScope*(symtab: var Symtab) =
 
 proc endScope*(symtab: var Symtab) =
     ## this must be called at the end of a scope to clean up that scope's symbols
-    while symtab.stack[symtab.stack.high] != markerSym:
+    while symtab.stack[^1] != markerSym:
         let sym = symtab.stack.pop
-        symtab[sym].pop()
+        symtab.tbl[sym].pop()
     symtab.stack.pop
 
