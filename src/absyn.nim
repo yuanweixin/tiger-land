@@ -160,22 +160,5 @@ type
         body*: Exp
         pos*: pos
 
-# Some toString's because $ isn't happy with ref types.
-proc `$`*(e: Exp): string =
-    result = $e[]
 
-proc `$`*(d: Dec): string =
-    result = $d[]
-
-proc `$`*(ty: Ty): string =
-    result = $ty[]
-
-proc `$`*(f: Field): string =
-    result = $f[]
-
-proc `$`*(f: FunDec): string =
-    result = $f[]
-
-proc `$`*(v: VarR): string =
-    result = $v[]
 
