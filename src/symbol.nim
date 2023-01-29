@@ -1,5 +1,6 @@
 import tables, options
 
+# TODO tests for these methods
 type
     Symbol* = (string, int)
     SymbolSet* = object
@@ -45,18 +46,18 @@ proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
         symtab.tbl[sym].add binding
     symtab.stack.add sym
 
-proc look*[T](symtab: var Symtab, sym: Symbol): Option[T] =
+proc look*[T](symtab: var Symtab[T], sym: Symbol): Option[T] =
     ## locate the last binding of the given symbol in the symtab.
     if sym in symtab.tbl:
         let bindings = symtab.tbl[sym]
         return some[T](bindings[^1])
     return none[T]()
 
-proc beginScope*(symtab: var Symtab) =
+proc beginScope*[T](symtab: var Symtab[T]) =
     ## this must be called at start of scope before adding symbols
     symtab.stack.add markerSym
 
-proc endScope*(symtab: var Symtab) =
+proc endScope*[T](symtab: var Symtab[T]) =
     ## this must be called at the end of a scope to clean up that scope's symbols
     while symtab.stack[^1] != markerSym:
         let sym = symtab.stack.pop
