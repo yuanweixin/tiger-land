@@ -1,6 +1,8 @@
 import parse
 import parseopt
 import print
+import semant
+import options
 
 proc main() =
     var filename = ""
@@ -11,10 +13,16 @@ proc main() =
         of cmdShortOption, cmdLongOption:
             discard
         of cmdEnd:
-            # doc says
-            # "There is no need to check for cmdEnd while iterating."
+            # doc says "There is no need to check for cmdEnd while iterating."
             discard
-    let ast = parse(filename)
-    print ast
+    let astOpt = parse(filename)
+    if astOpt.isNone:
+        echo "syntax errors detected, stopping."
+        system.quit(-1)
+    let hasTypeErr = transProg(astOpt.get)
+    if hasTypeErr:
+        echo "type errors detected, stopping."
+        system.quit(-1)
+    system.quit(0)
 
 main()

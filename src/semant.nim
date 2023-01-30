@@ -3,6 +3,7 @@ import options
 import symbol
 import translate
 import sets
+import print
 
 var typeTagCounter = 0
 
@@ -49,7 +50,7 @@ type
         case kind*: EnvEntryKind
         of VarEntry:
             ty*: Type
-            assignable*: bool = true
+            readonly*: bool
         of FunEntry:
             formals*: seq[Type]
             result*: Type
@@ -72,7 +73,6 @@ baseTEnv.enter symbol "string", Type(kind: StringT)
 
 var baseVEnv: VEnv
 
-
 proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
     echo pos, " ", msg
@@ -82,35 +82,42 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
 
 proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         v: absyn.VarR): ExpTy =
-    case v.kind
-    of SimpleVar:
-        let tyOpt = venv.look v.svs
-        if tyOpt.isNone:
-            error hasErr, v.svp, "use of undeclared variable."
-            raise newException(Exception, "todo return some error type")
-        return (42, tyOpt.get.ty)
-    of FieldVar: # id.id
-        let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar)
-        if tyLhs.kind != RecordT:
-            error hasErr, v.fvp, "tried to access field of a non-record type"
-        else:
-            for (sym, symty) in tyLhs.symTy:
-                if sym == v.fvs:
-                    return (42, symty)
-            error hasErr, v.fvp, "Field ", v.fvs.name,
-                    " is not part of record ", tyLhs
-        raise newException(Exception, "todo return error type")
-    of SubscriptVar:
-        let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar)
-        if tyLhs.kind != ArrayT:
-            error hasErr, v.pos, "tried to access a non-array"
-        else:
-            let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp)
-            if tyExp.kind != IntT:
-                error hasErr, v.pos, "array index is not an integer!"
+    result =
+        case v.kind
+        of SimpleVar:
+            let tyOpt = venv.look v.svs
+            if tyOpt.isNone:
+                error hasErr, v.svp, "use of undeclared variable."
+                (42, Type(kind: ErrorT))
             else:
-                return (42, tyLhs.ty)
-        raise newException(Exception, "todo return err type")
+                (42, tyOpt.get.ty)
+        of FieldVar: # id.id
+            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar)
+            if tyLhs.kind != RecordT:
+                error hasErr, v.fvp, "tried to access field of a non-record type"
+                (42, Type(kind: ErrorT))
+            else:
+                var ret = Type(kind: ErrorT)
+                for (sym, symty) in tyLhs.symTy:
+                    if sym == v.fvs:
+                        ret = symty
+                        break
+                if ret.kind == ErrorT:
+                    error hasErr, v.fvp, "Field ", v.fvs.name,
+                            " is not part of record ", tyLhs
+                (42, ret)
+        of SubscriptVar:
+            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar)
+            if tyLhs.kind != ArrayT:
+                error hasErr, v.pos, "tried to access a non-array"
+                (42, Type(kind: ErrorT))
+            else:
+                let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp)
+                if tyExp.kind != IntT:
+                    error hasErr, v.pos, "array index is not an integer!"
+                    (42, Type(kind: ErrorT))
+                else:
+                    (42, tyLhs.ty)
 
 ## TODO gonna write it with global error var, and pretend this is first site of type
 ## error, and see what happens.
@@ -119,168 +126,209 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec)
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         e: absyn.Exp): ExpTy =
-    case e.kind
-    of OpExp:
-        let (_, tyleft) = transExp(hasErr, venv, tenv, e.left)
-        let (_, tyright) = transExp(hasErr, venv, tenv, e.right)
-        case e.oper
-        of PlusOp, MinusOp, TimesOp, DivideOp:
-            if tyleft.kind != IntT:
-                error hasErr, e.opos, "integer expected on lhs for arithmetic operator"
-            if tyright.kind != IntT:
-                error hasErr, e.opos, "integer expected on rhs for airthmetic operator"
-            return (42, Type(kind: IntT))
-        of LtOp, LeOp, GtOp, GeOp:
-            if tyleft.kind != IntT:
-                error hasErr, e.opos, "integer expected on lhs for number comparison"
-            if tyright.kind != IntT:
-                error hasErr, e.opos, "integer expected on rhs for number comparison"
-            return (42, Type(kind: IntT))
-        of EqOp, NeqOp:
-            if tyleft.kind != tyright.kind:
-                error hasErr, e.opos, "both sides must be of same type for comparison"
+    result =
+        case e.kind
+        of OpExp:
+            let (_, tyleft) = transExp(hasErr, venv, tenv, e.left)
+            let (_, tyright) = transExp(hasErr, venv, tenv, e.right)
+            case e.oper
+            of PlusOp, MinusOp, TimesOp, DivideOp:
+                echo "tyleft"
+                print tyleft
+                if tyleft.kind != IntT:
+                    error hasErr, e.opos, "integer expected on lhs for arithmetic operator"
+                if tyright.kind != IntT:
+                    error hasErr, e.opos, "integer expected on rhs for airthmetic operator"
+                (42, Type(kind: IntT))
+            of LtOp, LeOp, GtOp, GeOp:
+                echo "tyleft"
+                print tyleft
+                if tyleft.kind != IntT:
+                    error hasErr, e.opos, "integer expected on lhs for number comparison"
+                if tyright.kind != IntT:
+                    error hasErr, e.opos, "integer expected on rhs for number comparison"
+                (42, Type(kind: IntT))
+            of EqOp, NeqOp:
+                echo "tyleft"
+                print tyleft
+                if tyleft.kind != tyright.kind:
+                    error hasErr, e.opos, "both sides must be of same type for comparison"
+                else:
+                    let (lk, rk) = (tyleft.kind, tyright.kind)
+                    if (lk, rk) notin [(IntT, IntT), (ArrayT, ArrayT), (RecordT, RecordT)]:
+                        error hasErr, e.opos, "comparison only supported for integer, array or record types"
+                (42, Type(kind: IntT))
+        of NilExp:
+            (42, Type(kind: NilT))
+        of IntExp:
+            (42, Type(kind: IntT))
+        of VarExp:
+            let (_, tyv) = transVar(hasErr, venv, tenv, e.v)
+            (42, tyv)
+        of StringExp:
+            (42, Type(kind: StringT))
+        of CallExp:
+            let fentryOpt = venv.look e.fun
+            if fentryOpt.isNone:
+                error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
+                (42, Type(kind: ErrorT))
+            elif fentryOpt.get.kind != FunEntry:
+                error hasErr, e.cp, e.fun.name, " is not a function!"
+                (42, Type(kind: ErrorT))
             else:
-                let (lk, rk) = (tyleft.kind, tyright.kind)
-                if (lk, rk) notin [(IntT, IntT), (ArrayT, ArrayT), (RecordT, RecordT)]:
-                    error hasErr, e.opos, "comparison only supported for integer, array or record types"
-            return (42, Type(kind: IntT))
-    of NilExp:
-        return (42, Type(kind: NilT))
-    of IntExp:
-        return (42, Type(kind: IntT))
-    of VarExp:
-        let (_, tyv) = transVar(hasErr, venv, tenv, e.v)
-        return (42, tyv)
-    of StringExp:
-        return (42, Type(kind: StringT))
-    of CallExp:
-        let fentryOpt = venv.look e.fun
-        if fentryOpt.isNone:
-            error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
-        elif fentryOpt.get.kind != FunEntry:
-            error hasErr, e.cp, e.fun.name, " is not a function!"
-        else:
-            if e.args.len != fentryOpt.get.formals.len:
-                error hasErr, e.cp, e.fun.name, " has ",
-                        fentryOpt.get.formals.len,
-                                " arguments but is called with ", e.args.len
-            for i in 0..e.args.high:
-                let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
-                if tyargi != fentryOpt.get.formals[i]:
-                    error hasErr, e.cp, e.fun.name, " call expects type ",
-                            fentryOpt.get.formals[i], " at argument ", i+1,
-                            " but got ", tyargi
-            return (42, fentryOpt.get.result)
-    of RecordExp:
-        let recEntryOpt = venv.look e.rectyp
-        if recEntryOpt.isNone:
-            error hasErr, e.rpos, e.rectyp.name, " has not been declared"
-        elif recEntryOpt.get.kind != VarEntry or recEntryOpt.get.ty.kind != RecordT:
-            error hasErr, e.rpos, e.rectyp.name, " is not a record type"
-        else:
-            let expRecTy = recEntryOpt.get.ty
-            if expRecTy.symTy.len != e.fields.len:
-                error hasErr, e.rpos, e.rectyp.name, " does not have same fields as the ones given "
+                if e.args.len != fentryOpt.get.formals.len:
+                    error hasErr, e.cp, e.fun.name, " has ",
+                            fentryOpt.get.formals.len,
+                                    " arguments but is called with ", e.args.len
+                for i in 0..e.args.high:
+                    let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
+                    if tyargi != fentryOpt.get.formals[i]:
+                        error hasErr, e.cp, e.fun.name, " call expects type ",
+                                fentryOpt.get.formals[i], " at argument ", i+1,
+                                " but got ", tyargi
+                (42, fentryOpt.get.result)
+        of RecordExp:
+            let recEntryOpt = venv.look e.rectyp
+            if recEntryOpt.isNone:
+                error hasErr, e.rpos, e.rectyp.name, " has not been declared"
+                (42, Type(kind: ErrorT))
+            elif recEntryOpt.get.kind != VarEntry or recEntryOpt.get.ty.kind != RecordT:
+                error hasErr, e.rpos, e.rectyp.name, " is not a record type"
+                (42, Type(kind: ErrorT))
             else:
-                for (sym, exp, pos) in e.fields:
-                    for (symInTy, typExpected) in expRecTy.symTy:
-                        if sym == symInTy:
-                            let (_, tyActual) = transExp(hasErr, venv, tenv, exp)
-                            if typExpected != tyActual:
-                                error hasErr, pos, sym.name,
-                                        " is expected to have type ",
-                                        typExpected, " but got ", tyActual
-            return (42, expRecTy)
-        raise newException(Exception, "todo handle when can't return a type")
-    of SeqExp:
-        var i = 0
-        while i < e.eplist.len:
-            let (_, tyExp) = transExp(hasErr, venv, tenv, e.eplist[i][0])
-            inc i
-            if i == e.eplist.len:
-                return (42, tyExp)
-        return (42, Type(kind: UnitT))
-    of AssignExp:
-        # nil can be assigned to record type vars
-        let (_, lhs) = transVar(hasErr, venv, tenv, e.avar)
-        let (_, rhs) = transExp(hasErr, venv, tenv, e.aexp)
-        if rhs.kind == NilT and lhs.kind != RecordT:
-            error hasErr, e.apos, "nil can only be assigned to a record type"
-        if lhs.kind != rhs.kind:
-            error hasErr, e.apos, "attempting to assign type ", rhs.kind,
-                    " to ", lhs.kind
-        # assignment produces no value
-        return (42, Type(kind: UnitT))
-    of IfExp:
-        let (_, tytest) = transExp(hasErr, venv, tenv, e.iftest)
-        if tytest.kind != IntT:
-            error hasErr, e.ifpos, "if condition must be of type integer"
-        let (_, tythen) = transExp(hasErr, venv, tenv, e.then)
-        if e.els.isNone:
-            if tythen.kind != UnitT:
-                error hasErr, e.ifpos, "if-then branch must not produce a value"
-        else:
-            let (_, tyelse) = transExp(hasErr, venv, tenv, e.els.get)
-            if tythen.kind != tyelse.kind:
-                error hasErr, e.ifpos, "if-then-else branches must have same type"
-        # if type error happens with branches, will just return the then.
-        return (42, tythen)
-    of WhileExp:
-        let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest)
-        if tytest.kind != IntT:
-            error hasErr, e.wpos, "while condition must be of type integer"
-        let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody)
-        if tybody.kind != UnitT:
-            error hasErr, e.wpos, "while body must not produce a value"
-        return (42, Type(kind: UnitT))
-    of ForExp:
-        let (_, tylo) = transExp(hasErr, venv, tenv, e.lo)
-        let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi)
-        if tylo.kind != IntT or tyhi.kind != IntT:
-            error hasErr, e.fpos, "values of for range must be integer"
-        else:
-            venv.beginScope()
-            # the spec says the index of for loop cannot be assigned to.
-            venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(kind: IntT),
-                    assignable: false))
-            let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody)
-            if tyfbody.kind != UnitT:
-                error hasErr, e.fpos, "for body must not produce a value"
-            venv.endScope()
-        return (42, Type(kind: UnitT))
-    of BreakExp:
-        # breaks need to be in context of a while or for, not crossing a procedure
-        # call boundary, i.e. if p calls q and break is in q, does not affect p.
-        # TODO fix this in part b.
-        return (42, Type(kind: UnitT))
-    of LetExp:
-        tenv.beginScope
-        venv.beginScope
-        for dec in e.decs:
-            # TODO this probably should indicate error, so
-            # that type checking can be stopped if decl doesn't check out.
-            transDec(hasErr, venv, tenv, dec)
-        let (_, tyExp) = transExp(hasErr, venv, tenv, e.letbody)
-        tenv.endScope
-        venv.endScope
-        return (42, tyExp)
-    of ArrayExp: # Id Lbrack exp Rbrack Of exp:
-        # is this array type declared?
-        let atyOpt = tenv.look e.arrtyp
-        if atyOpt.isNone:
-            error hasErr, e.arrpos, "trying to use an undeclared array type ", e.arrtyp.name
-        elif atyOpt.get.kind != ArrayT:
-            error hasErr, e.arrpos, e.arrtyp.name, " is not array type!"
-        # check the size and initial values.
-        let (_, tysize) = transExp(hasErr, venv, tenv, e.size)
-        if tysize.kind != IntT:
-            error hasErr, e.arrpos, "must pass integer for array size"
-        let (_, tyinit) = transExp(hasErr, venv, tenv, e.init)
-        # the initializer type must match the array's element type.
-        if tyinit != atyOpt.get:
-            error hasErr, e.arrpos, "array initializer type is ", tyinit.kind,
-                    " but array is declared with type ", atyOpt.get
-        return (42, atyOpt.get)
+                let expRecTy = recEntryOpt.get.ty
+                if expRecTy.symTy.len != e.fields.len:
+                    error hasErr, e.rpos, e.rectyp.name, " does not have same fields as the ones given "
+                    (42, Type(kind: ErrorT))
+                else:
+                    var err = false
+                    for (sym, exp, pos) in e.fields:
+                        for (symInTy, typExpected) in expRecTy.symTy:
+                            if sym == symInTy:
+                                let (_, tyActual) = transExp(hasErr, venv, tenv, exp)
+                                if typExpected != tyActual:
+                                    err = true
+                                    error hasErr, pos, sym.name,
+                                            " is expected to have type ",
+                                            typExpected, " but got ", tyActual
+                    if err:
+                        (42, Type(kind: ErrorT))
+                    else:
+                        (42, expRecTy)
+        of SeqExp:
+            var i = 0
+            var retVal = Type(kind: UnitT)
+            while i < e.eplist.len:
+                let (_, tyExp) = transExp(hasErr, venv, tenv, e.eplist[i][0])
+                inc i
+                if i == e.eplist.len:
+                    retVal = tyExp
+            (42, retVal)
+        of AssignExp:
+            # nil can be assigned to record type vars
+            let (_, lhs) = transVar(hasErr, venv, tenv, e.avar)
+            let (_, rhs) = transExp(hasErr, venv, tenv, e.aexp)
+            if rhs.kind == NilT and lhs.kind != RecordT:
+                error hasErr, e.apos, "nil can only be assigned to a record type"
+                (42, Type(kind: ErrorT))
+            elif lhs.kind != rhs.kind:
+                error hasErr, e.apos, "attempting to assign type ", rhs.kind,
+                        " to ", lhs.kind
+                (42, Type(kind: ErrorT))
+            else:
+                # assignment produces no value
+                (42, Type(kind: UnitT))
+        of IfExp:
+            let (_, tytest) = transExp(hasErr, venv, tenv, e.iftest)
+            if tytest.kind != IntT:
+                error hasErr, e.ifpos, "if condition must be of type integer"
+                (42, Type(kind: ErrorT))
+            else:
+                let (_, tythen) = transExp(hasErr, venv, tenv, e.then)
+                if e.els.isNone:
+                    if tythen.kind != UnitT:
+                        error hasErr, e.ifpos, "if-then branch must not produce a value"
+                        (42, Type(kind: ErrorT))
+                    else:
+                        (42, tythen)
+                else:
+                    let (_, tyelse) = transExp(hasErr, venv, tenv, e.els.get)
+                    if tythen.kind != tyelse.kind:
+                        error hasErr, e.ifpos, "if-then-else branches must have same type"
+                        (42, Type(kind: ErrorT))
+                    else:
+                        (42, tythen)
+        of WhileExp:
+            let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest)
+            if tytest.kind != IntT:
+                error hasErr, e.wpos, "while condition must be of type integer"
+                (42, Type(kind: ErrorT))
+            else:
+                let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody)
+                if tybody.kind != UnitT:
+                    error hasErr, e.wpos, "while body must not produce a value"
+                    (42, Type(kind: ErrorT))
+                else:
+                    (42, Type(kind: UnitT))
+        of ForExp:
+            let (_, tylo) = transExp(hasErr, venv, tenv, e.lo)
+            let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi)
+            if tylo.kind != IntT or tyhi.kind != IntT:
+                error hasErr, e.fpos, "values of for range must be integer"
+                (42, Type(kind: ErrorT))
+            else:
+                venv.beginScope()
+                # TODO the spec says the index of for loop cannot be assigned to.
+                venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
+                        kind: IntT), readonly: true))
+                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody)
+                if tyfbody.kind != UnitT:
+                    error hasErr, e.fpos, "for body must not produce a value"
+                    venv.endScope()
+                    (42, Type(kind: ErrorT))
+                else:
+                    (42, Type(kind: UnitT))
+        of BreakExp:
+            # breaks need to be in context of a while or for, not crossing a procedure
+            # call boundary, i.e. if p calls q and break is in q, does not affect p.
+            # TODO fix this in part b.
+            (42, Type(kind: UnitT))
+        of LetExp:
+            tenv.beginScope
+            venv.beginScope
+            for dec in e.decs:
+                # TODO this probably should indicate error, so
+                # that type checking can be stopped if decl doesn't check out.
+                transDec(hasErr, venv, tenv, dec)
+            let (_, tyExp) = transExp(hasErr, venv, tenv, e.letbody)
+            tenv.endScope
+            venv.endScope
+            (42, tyExp)
+        of ArrayExp: # Id Lbrack exp Rbrack Of exp:
+            # is this array type declared?
+            let atyOpt = tenv.look e.arrtyp
+            if atyOpt.isNone:
+                error hasErr, e.arrpos, "trying to use an undeclared array type ", e.arrtyp.name
+                (42, Type(kind: ErrorT))
+            elif atyOpt.get.kind != ArrayT:
+                error hasErr, e.arrpos, e.arrtyp.name, " is not array type!"
+                (42, Type(kind: ErrorT))
+            else:
+                # check the size and initial values.
+                let (_, tysize) = transExp(hasErr, venv, tenv, e.size)
+                if tysize.kind != IntT:
+                    error hasErr, e.arrpos, "must pass integer for array size"
+                    (42, Type(kind: ErrorT))
+                else:
+                    let (_, tyinit) = transExp(hasErr, venv, tenv, e.init)
+                    # the initializer type must match the array's element type.
+                    if tyinit != atyOpt.get:
+                        error hasErr, e.arrpos, "array initializer type is ",
+                                tyinit.kind,
+                                        " but array is declared with type ", atyOpt.get
+                        (42, Type(kind: ErrorT))
+                    else:
+                        (42, atyOpt.get)
 
 proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
     ## translates the type expressions as found in ast to digsted type
@@ -384,5 +432,8 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
         venv.enter d.vdname, varEntry
 
 
-proc transProg*(ast: Exp) =
-    discard
+proc transProg*(ast: Exp): bool =
+    ## return whether there was type errors.
+    var hasErr = false
+    let (_, tyAst) = transExp(hasErr, baseVEnv, baseTEnv, ast)
+    return hasErr
