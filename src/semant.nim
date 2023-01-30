@@ -66,8 +66,10 @@ type VEnv = SymTab[EnvEntry]
 
 type ExpTy = (TranslatedExp, Type)
 
-# TODO fill us
 var baseTEnv: TEnv
+baseTEnv.enter symbol "int", Type(kind: IntT)
+baseTEnv.enter symbol "string", Type(kind: StringT)
+
 var baseVEnv: VEnv
 
 

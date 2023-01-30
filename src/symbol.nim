@@ -1,18 +1,14 @@
 import tables, options
 
-# TODO tests for these methods
 type
     Symbol* = (string, int)
     SymbolSet* = object
         created: Table[string, int]
         nextIdx: int
 
-proc newSymbolSet*(): SymbolSet =
-    # initiates a new set of symbols for use in compiler.
-    # only one symbol set should be created per invocation of tiger.
-    result = SymbolSet(created: initTable[string, int](), nextIdx: 0)
+# only one instance is created per invocation of tiger.
+var symset = SymbolSet(created: initTable[string, int](), nextIdx: 0)
 
-var symset = newSymbolSet()
 
 func name*(s: Symbol): string =
     ## extracts the name part of the symbol.
@@ -36,7 +32,7 @@ type
         stack: seq[Symbol]
 
 proc newSymtab*[T](): Symtab[T] =
-    result = Symtab(tbl: initTable[Symbol, seq[T]](), stack: @[])
+    result = Symtab[T](tbl: initTable[Symbol, seq[T]](), stack: @[])
 
 proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
     ## adds the given symbol to the symtab.
