@@ -13,3 +13,4 @@ test "symtab scopes":
     check (isymtab.look (symbol "x")) == some[int](102)
     isymtab.endScope()
     check (isymtab.look (symbol "x")) == some[int](100)
+

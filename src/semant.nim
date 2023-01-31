@@ -3,7 +3,7 @@ import options
 import symbol
 import translate
 import sets
-import sequtils
+import strutils
 
 var typeTagCounter = 0
 
@@ -39,6 +39,9 @@ type Type* = ref object
     of NilT, IntT, StringT, UnitT, ErrorT:
         discard
 
+proc `$`*(t: Type): string =
+    return $t[]
+
 proc `==`*(a, b: Type): bool =
     if a.kind != b.kind:
         return false
@@ -51,9 +54,6 @@ proc `==`*(a, b: Type): bool =
         return a.s == b.s and a.tyopt == b.tyopt
     else:
         return true
-
-proc `$`(x: Type): string =
-    return $x[]
 
 type
     EnvEntryKind* = enum
@@ -112,7 +112,7 @@ proc newBaseVEnv(): Venv =
 
 proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
-    echo pos, " ", msg
+    echo pos, " ", msg.join("")
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         e: absyn.Exp): ExpTy
@@ -130,7 +130,9 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 (42, tyOpt.get.ty)
         of FieldVar: # id.id
             let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar)
-            if tyLhs.kind != RecordT:
+            if tyLhs.kind == ErrorT:
+                (42, Type(kind: ErrorT))
+            elif tyLhs.kind != RecordT:
                 error hasErr, v.fvp, "tried to access field of a non-record type ", tyLhs.kind
                 (42, Type(kind: ErrorT))
             else:
@@ -446,6 +448,7 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
 proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
     case d.kind
     of TypeDec: # type id eq ty
+        echo $d[]
         for dec in d.decs:
             let ty = transTy(hasErr, tenv, dec.tdty)
             tenv.enter dec.tdname, ty
