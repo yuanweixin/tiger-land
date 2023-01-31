@@ -394,10 +394,10 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 else:
                     let (_, tyinit) = transExp(hasErr, venv, tenv, e.init)
                     # the initializer type must match the array's element type.
-                    if tyinit != atyOpt.get:
+                    if tyinit != atyOpt.get.ty:
                         error hasErr, e.arrpos, "array initializer type is ",
                                 tyinit.kind,
-                                        " but array is declared with type ", atyOpt.get
+                                        " but array is declared with type ", atyOpt.get.ty
                         (42, Type(kind: ErrorT))
                     else:
                         (42, atyOpt.get)
@@ -448,7 +448,6 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
 proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
     case d.kind
     of TypeDec: # type id eq ty
-        echo $d[]
         for dec in d.decs:
             let ty = transTy(hasErr, tenv, dec.tdty)
             tenv.enter dec.tdname, ty
