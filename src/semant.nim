@@ -1,3 +1,4 @@
+
 import absyn
 import options
 import symbol
@@ -39,10 +40,49 @@ type Type* = ref object
     of NilT, IntT, StringT, UnitT, ErrorT:
         discard
 
-proc `$`*(t: Type): string =
-    return $t[]
+proc helper(t: Type, s: var string, seen: var HashSet[Symbol]) =
+    case t.kind
+    of NilT:
+        s.add "NilT"
+    of IntT:
+        s.add "IntT"
+    of StringT:
+        s.add "StringT"
+    of UnitT:
+        s.add "UnitT"
+    of ErrorT:
+        s.add "ErrorT"
+    of NameT:
+        s.add "NameT(s:"
+        s.add t.s.name
+        s.add ", ty:"
+        if t.tyopt.isSome:
+            if t.s notin seen:
+                seen.incl t.s
+                helper(t.tyopt.get, s, seen)
+            else:
+                s.add t.s.name
+        else:
+            s.add "None"
+        s.add ")"
+    of RecordT:
+        s.add "RecordT(symTy:["
+        for (sym, ty) in t.symTy:
+            s.add "("
+            s.add sym.name
+            s.add ","
+            helper(ty, s, seen)
+            s.add "), "
+        s.add ")"
 
-proc `==`*(a, b: Type): bool =
+    of ArrayT:
+        s.add "Shit"
+
+proc `$`*(t: Type): string =
+    var seen: HashSet[Symbol] # for recursion...
+    helper(t, result, seen)
+
+func `==`*(a, b: Type): bool =
     if a.kind != b.kind:
         return false
     case a.kind
@@ -108,8 +148,6 @@ proc newBaseVEnv(): Venv =
     result.enter symbol "exit", EnvEntry(kind: FunEntry, formals: @[Type(
             kind: IntT)], result: Type(kind: UnitT))
 
-
-
 proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
     echo pos, " ", msg.join("")
@@ -159,7 +197,6 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     (42, Type(kind: ErrorT))
                 else:
                     (42, tyLhs.ty)
-
 
 proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec)
 
@@ -410,16 +447,12 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
         case ty.kind
         of NameTy: # Id
             let tyOpt = tenv.look ty.nts
-            if tyOpt.isNone:
-                error hasErr, ty.ntpos, ty.nts.name, " is not declared"
-                Type(kind: ErrorT)
-            else:
-                Type(kind: NameT, s: ty.nts, tyopt: tyOpt)
+            Type(kind: NameT, s: ty.nts, tyopt: tyOpt)
         of ArrayTy: # Array of Id
             let tyOpt = tenv.look ty.arrs
             if tyOpt.isNone:
-                error hasErr, ty.arrpos, ty.arrs.name, " is not declared and hence is invalid for use as array element"
-                Type(kind: ErrorT)
+                Type(kind: ArrayT, ty: Type(kind: NameT, s: ty.arrs,
+                        tyopt: none[Type]()), att: newTypeTag())
             else:
                 Type(kind: ArrayT, ty: tyOpt.get, att: newTypeTag())
         of RecordTy: # Lbrace fields Rbrace
@@ -435,9 +468,8 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
                     seen.incl field.name
                     let tyOpt = tenv.look field.typ
                     if tyOpt.isNone:
-                        err = true
-                        error hasErr, field.pos, "undeclared type ",
-                                field.typ.name, " used in record, declare it first"
+                        symTyp.add (field.name, Type(kind: NameT, s: field.typ,
+                                tyopt: none[Type]()))
                     else:
                         symTyp.add (field.name, tyOpt.get)
             if err:
@@ -445,55 +477,155 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
             else:
                 Type(kind: RecordT, symTy: symTyp, rtt: newTypeTag())
 
+proc fixup(hasErr: var bool, tenv: var TEnv, tofix: Type, pos: pos) =
+    # we can mutate `tofix` because it's a ref type.
+    case tofix.kind
+    of NameT:
+        let tyopt = tenv.look tofix.s
+        if tyopt.isNone:
+            error hasErr, pos, tofix.s.name, " is undeclared type."
+        else:
+            tofix.tyopt = tyopt
+    of ArrayT:
+        if tofix.ty.kind == NameT and tofix.ty.tyopt.isNone:
+            let tyopt = tenv.look tofix.ty.s
+            if tyopt.isNone:
+                error hasErr, pos, tofix.ty.s.name, " is undeclared type."
+            else:
+                tofix.ty = tyopt.get
+    of RecordT:
+        for (sym, typ) in tofix.symTy.mitems():
+            if typ.kind == NameT and typ.tyopt.isNone:
+                let tyopt = tenv.look typ.s
+                if tyopt.isNone:
+                    error hasErr, pos, typ.s, " is undeclared type."
+                else:
+                    typ = tyopt.get
+    else:
+        when defined(tigerdevel):
+            doAssert tofix.kind == ErrorT, "bug in impl, expecting only ErrorT to show in the else branch of case statement for fixing up missing types."
+        discard # ErrorT could show up here.
+
 proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
     case d.kind
-    of TypeDec: # type id eq ty
+    of TypeDec: # seq[type id eq ty] 
+        # spec from appendix:
+        # mutually recursive types are declared by a conseq seq of type dec
+        # without intervening value or func dec. Each recursion cycle must 
+        # pass through a record or array type. 
+        # 
+        # ...no two types in a seq of mutually recursive types may have the
+        # same name.
+        var seen: HashSet[Symbol]
+        var tofixup: seq[(Type, pos)]
         for dec in d.decs:
-            let ty = transTy(hasErr, tenv, dec.tdty)
-            tenv.enter dec.tdname, ty
+            if dec.tdname in seen:
+                error hasErr, dec.tdpos, "the type name ", dec.tdname, " is declared more than once in a sequence of mutually recursive types, which is illegal."
+                tenv.enter dec.tdname, Type(kind: ErrorT)
+            else:
+                seen.incl dec.tdname
+                let ty = transTy(hasErr, tenv, dec.tdty)
+                tenv.enter dec.tdname, ty
+                tofixup.add (ty, dec.tdpos)
+        # now fix up the stuff we just added.
+        for (tofix, pos) in tofixup:
+            fixup(hasErr, tenv, tofix, pos)
     of FunctionDec: # Function Id Lparen fields Rparen type_opt Eq exp
-        # TODO add in the recursive defs by doing another pass.
+        # no two functions in a sequence of mutually recursive functions 
+        # may have the same name. 
+        # 
+        # functions may be recursive. mutually recursive functions and procs
+        # are declared by a seq of conseq func declarations with no intervening
+        # type or var decls.
+        var seen: HashSet[Symbol]
+        var tofixup: seq[(Type, pos)]
         for fundec in d.fundecs:
+            if fundec.name in seen:
+                error hasErr, fundec.pos, fundec.name, " is declared more than once in a sequence of mutually recursive types, which is illegal."
+                # probably need to insert an error entry here so that later
+                # typechecks of function body fails or knows to error?
+            else:
+                seen.incl fundec.name
+
             let retTy =
                 if fundec.result.isNone:
                     Type(kind: UnitT)
                 else:
-                    let (ressym, respos) = fundec.result.get
+                    let (ressym, pos) = fundec.result.get
                     let restyOpt = tenv.look ressym
                     if restyOpt.isNone:
-                        error hasErr, respos, ressym.name, " is not a valid type"
-                        Type(kind: ErrorT)
+                        let t = Type(kind: NameT, s: ressym, tyopt: none[Type]())
+                        tofixup.add (t, pos)
+                        t
                     else:
                         restyOpt.get
 
-            # extract the NameT types from the params.
-            # the ty info is used to construct the FunEntry.
-            # the (name, ty) is injected into the venv prior to body type check.
-            var params: seq[Type]
+            var formals: seq[Type]
             for field in fundec.params:
                 let fieldTyOpt = tenv.look field.typ
                 if fieldTyOpt.isNone:
-                    error hasErr, field.pos, field.typ.name, " used in function declaration is not a valid type"
-                    params.add Type(kind: ErrorT)
+                    let t = Type(kind: NameT, s: field.typ, tyopt: none[Type]())
+                    tofixup.add (t, field.pos)
+                    formals.add t
                 else:
-                    params.add Type(kind: NameT, s: field.name,
-                            tyopt: fieldTyOpt)
-
-            var formals: seq[Type]
-            for p in params:
-                formals.add p.tyopt.get
+                    formals.add fieldTyOpt.get
             var funentry = EnvEntry(kind: FunEntry, formals: formals, result: retTy)
 
             venv.enter fundec.name, funentry
+
+        # do the fix up.
+        for fundec in d.fundecs:
+            var funentry = (venv.look fundec.name).get
+            var changed = false
+            when defined(tigerdevel):
+                doAssert funentry.formals.len == fundec.params.len,
+                        "bug, FunEntry.formals different len than in AST, funentry.formals.len=" &
+                        $funentry.formals.len & " fundec.params.len=" &
+                        $fundec.params.len
+            var i = 0
+            while i < fundec.params.len:
+                if funentry.formals[i].kind == NameT and funentry.formals[
+                        i].tyopt.isNone:
+                    changed = true
+                    let lookup = tenv.look funentry.formals[i].s
+                    if lookup.isNone:
+                        error hasErr, fundec.params[i].pos, funentry.formals[
+                                i].s.name, " is undeclared type."
+                        funentry.formals[i] = Type(kind: ErrorT)
+                    else:
+                        funentry.formals[i] = lookup.get
+                inc i
+            if funentry.result.kind == NameT and funentry.result.tyopt.isNone:
+                let lookup = tenv.look funentry.result.s
+                if lookup.isNone:
+                    changed = true
+                    error hasErr, fundec.result.get[1], funentry.result.s.name, " is undeclared type."
+                    funentry.result = Type(kind: ErrorT)
+                else:
+                    funentry.result = lookup.get
+            if changed:
+                # FunEntry is a value type.
+                # we could have written a proc to return a lvalue but
+                # mutation is generally evil and hard to get right, so
+                # here we will just override the existing entry with
+                # the updated one. it will get popped once we exit the
+                # venv scope anyway.
+                venv.enter fundec.name, funentry
+
+        # type check the Exp of the functions.
+        for fundec in d.fundecs:
+            let funentry = (venv.look fundec.name).get
+            var i = 0
             venv.beginScope()
-            # inject the function's params as VarEntry prior to type checking body.
-            for p in params:
-                let varEntry = EnvEntry(kind: VarEntry, ty: p.tyopt.get)
-                venv.enter p.s, varEntry
+            while i < fundec.params.len:
+                let varEntry = EnvEntry(kind: VarEntry, ty: funentry.formals[i])
+                venv.enter fundec.params[i].name, varEntry
+                inc i
             let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body)
-            if retTy != tyRes and retTy.kind != ErrorT and tyRes.kind != ErrorT:
-                error hasErr, fundec.pos, "expected return type of ", retTy,
-                        " for function but got ", tyRes
+            if funentry.result != tyRes and funentry.result.kind != ErrorT and
+                    tyRes.kind != ErrorT:
+                error hasErr, fundec.pos, "expected return type of ",
+                        funentry.result, " for function but got ", tyRes
             venv.endScope()
     of VarDec: # Var Id type_opt Assign exp:
         let (_, tyExp) = transExp(hasErr, venv, tenv, d.init)
