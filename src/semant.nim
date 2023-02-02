@@ -8,7 +8,6 @@ import strutils
 import hashes
 
 var typeTagCounter = 0
-
 # A new tag is assigned to each array/record declaration.
 type TypeTag = int
 
@@ -39,6 +38,12 @@ type Type* = ref object
         s*: Symbol
     of NilT, IntT, StringT, UnitT, ErrorT:
         discard
+
+let ErrorTy = Type(kind: ErrorT)
+let UnitTy = Type(kind: UnitT)
+let IntTy = Type(kind: IntT)
+let StringTy = Type(kind: StringT)
+let NilTy = Type(kind: NilT)
 
 proc hash(t: Type): Hash =
     # just copy the hash*[T](x: ref[T) in hashes.nim
@@ -136,36 +141,43 @@ type ExpTy = (TranslatedExp, Type)
 proc newBaseTEnv(): TEnv =
     result.beginScope()
     ## the built-in types
-    result.enter symbol "int", Type(kind: IntT)
-    result.enter symbol "string", Type(kind: StringT)
+    result.enter symbol "int", IntTy
+    result.enter symbol "string", StringTy
 
 proc newBaseVEnv(): Venv =
     result.beginScope()
     ## the built-in vars and functions
     result.enter symbol "print", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: StringT)], result: Type(kind: UnitT))
+            kind: StringT)], result: UnitTy)
     result.enter symbol "flush", EnvEntry(kind: FunEntry, formals: @[],
-            result: Type(kind: UnitT))
+            result: UnitTy)
     result.enter symbol "getchar", EnvEntry(kind: FunEntry, formals: @[],
-            result: Type(kind: StringT))
+            result: StringTy)
     result.enter symbol "ord", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: StringT)], result: Type(kind: IntT))
+            kind: StringT)], result: IntTy)
     result.enter symbol "chr", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: IntT)], result: Type(kind: StringT))
+            kind: IntT)], result: StringTy)
     result.enter symbol "size", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: StringT)], result: Type(kind: IntT))
+            kind: StringT)], result: IntTy)
     result.enter symbol "substring", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: StringT), Type(kind: IntT), Type(kind: IntT)], result: Type(kind: StringT))
+            kind: StringT), IntTy, IntTy], result: StringTy)
     result.enter symbol "concat", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: StringT), Type(kind: StringT)], result: Type(kind: StringT))
+            kind: StringT), StringTy], result: StringTy)
     result.enter symbol "not", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: IntT)], result: Type(kind: IntT))
+            kind: IntT)], result: IntTy)
     result.enter symbol "exit", EnvEntry(kind: FunEntry, formals: @[Type(
-            kind: IntT)], result: Type(kind: UnitT))
+            kind: IntT)], result: UnitTy)
 
-proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
+proc errorDedup(ty: Type, hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
+    hasErr = true
+    # stfu about errors we already warned about.
+    if ty.kind != ErrorT:
+        echo pos, " ", msg.join("")
+
+proc error(hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     hasErr = true
     echo pos, " ", msg.join("")
+
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         e: absyn.Exp, loopContext: bool): ExpTy
@@ -178,16 +190,15 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             let tyOpt = venv.look v.svs
             if tyOpt.isNone:
                 error hasErr, v.svp, "use of undeclared variable."
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             else:
                 (42, tyOpt.get.ty)
         of FieldVar: # id.id
             let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar, loopContext)
-            if tyLhs.kind == ErrorT:
-                (42, Type(kind: ErrorT))
-            elif tyLhs.kind != RecordT:
-                error hasErr, v.fvp, "tried to access field of a non-record type ", tyLhs.kind
-                (42, Type(kind: ErrorT))
+            if tyLhs.kind != RecordT:
+                errorDedup tyLhs, hasErr, v.fvp,
+                        "tried to access field of a non-record type ", tyLhs.kind
+                (42, ErrorTy)
             else:
                 var ret: Type = nil
                 for (sym, symty) in tyLhs.symTy:
@@ -197,19 +208,19 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 if isNil(ret):
                     error hasErr, v.fvp, "Field ", v.fvs.name,
                             " is not part of record ", tyLhs
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
                     (42, ret)
         of SubscriptVar:
             let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar, loopContext)
             if tyLhs.kind != ArrayT:
-                error hasErr, v.pos, "tried to access a non-array"
-                (42, Type(kind: ErrorT))
+                errorDedup tyLhs, hasErr, v.pos, "tried to access a non-array"
+                (42, ErrorTy)
             else:
                 let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp, loopContext)
                 if tyExp.kind != IntT:
-                    error hasErr, v.pos, "array index is not an integer!"
-                    (42, Type(kind: ErrorT))
+                    errorDedup tyExp, hasErr, v.pos, "array index is not an integer!"
+                    (42, ErrorTy)
                 else:
                     (42, tyLhs.ty)
 
@@ -233,33 +244,33 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             of PlusOp, MinusOp, TimesOp, DivideOp:
                 if tyleft.kind != IntT and tyleft.kind != ErrorT:
                     error hasErr, e.opos, "integer expected on lhs for arithmetic operator"
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif tyright.kind != IntT and tyright.kind != ErrorT:
                     error hasErr, e.opos, "integer expected on rhs for airthmetic operator"
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif tyleft.kind == ErrorT or tyright.kind == ErrorT:
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
-                    (42, Type(kind: IntT))
+                    (42, IntTy)
             of LtOp, LeOp, GtOp, GeOp:
                 if tyleft.kind != IntT and tyleft.kind != ErrorT:
                     error hasErr, e.opos, "integer expected on lhs for number comparison"
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif tyright.kind != IntT and tyright.kind != ErrorT:
                     error hasErr, e.opos, "integer expected on rhs for number comparison"
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif tyleft.kind == ErrorT or tyright.kind == ErrorT:
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
-                    (42, Type(kind: IntT))
+                    (42, IntTy)
             of EqOp, NeqOp:
                 if tyleft.kind == ErrorT or tyright.kind == ErrorT:
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif not typesCompatible(tyleft, tyright):
                     error hasErr, e.opos,
                             "both sides must be of same type for comparison, got ",
                             tyleft, " on lhs and got ", tyright, " on the rhs."
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 elif tyleft.kind notin [IntT, ArrayT, RecordT, StringT] and
                         tyright.kind notin [IntT, ArrayT, RecordT, StringT]:
                     # note: this condition is after the compatibility check
@@ -268,31 +279,31 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     error hasErr, e.opos,
                             "comparison only supported for integer, array or record types, but is used on ",
                             tyleft, " and ", tyright
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
-                    (42, Type(kind: IntT))
+                    (42, IntTy)
         of NilExp:
-            (42, Type(kind: NilT))
+            (42, NilTy)
         of IntExp:
-            (42, Type(kind: IntT))
+            (42, IntTy)
         of VarExp:
             let (_, tyv) = transVar(hasErr, venv, tenv, e.v, loopContext)
             (42, tyv)
         of StringExp:
-            (42, Type(kind: StringT))
+            (42, StringTy)
         of CallExp:
             let fentryOpt = venv.look e.fun
             if fentryOpt.isNone:
                 error hasErr, e.cp, "Trying to call an undeclared function ", e.fun.name
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif fentryOpt.get.kind != FunEntry:
                 error hasErr, e.cp, e.fun.name, " is not a function!"
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif e.args.len != fentryOpt.get.formals.len:
                 error hasErr, e.cp, e.fun.name, " has ",
                         fentryOpt.get.formals.len,
                                 " arguments but is called with ", e.args.len
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             else:
                 var err = false
                 for i in 0..e.args.high:
@@ -306,23 +317,22 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                                 fentryOpt.get.formals[i], " at argument ", i+1,
                                 " but got ", tyargi
                 if err:
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
                     (42, fentryOpt.get.result)
         of RecordExp:
             let recEntryOpt = tenv.look e.rectyp
             if recEntryOpt.isNone:
                 error hasErr, e.rpos, e.rectyp.name, " has not been declared"
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif recEntryOpt.get.kind != RecordT:
-                if recEntryOpt.get.ty.kind != ErrorT:
-                    error hasErr, e.rpos, e.rectyp.name, " is not a record type"
-                (42, Type(kind: ErrorT))
+                errorDedup recEntryOpt.get.ty, hasErr, e.rpos, e.rectyp.name, " is not a record type"
+                (42, ErrorTy)
             else:
                 let expRecTy = recEntryOpt.get
                 if expRecTy.symTy.len != e.fields.len:
                     error hasErr, e.rpos, e.rectyp.name, " does not have same fields as the ones given "
-                    (42, Type(kind: ErrorT))
+                    (42, ErrorTy)
                 else:
                     var err = false
                     for (sym, exp, pos) in e.fields:
@@ -336,7 +346,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                                             " is expected to have type ",
                                             typExpected, " but got ", tyActual
                     if err:
-                        (42, Type(kind: ErrorT))
+                        (42, ErrorTy)
                     else:
                         (42, expRecTy)
         of SeqExp:
@@ -348,7 +358,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 if i == e.eplist.len:
                     retVal = tyExp
             if isNil(retVal):
-                (42, Type(kind: UnitT))
+                (42, UnitTy)
             else:
                 (42, retVal)
         of AssignExp:
@@ -356,14 +366,14 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             let (_, lhs) = transVar(hasErr, venv, tenv, e.avar, loopContext)
             let (_, rhs) = transExp(hasErr, venv, tenv, e.aexp, loopContext)
             if lhs.kind == ErrorT or rhs.kind == ErrorT:
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif rhs.kind == NilT and lhs.kind != RecordT:
                 error hasErr, e.apos, "nil can only be assigned to a record type but is being assigned to ", lhs
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif not typesCompatible(lhs, rhs):
                 error hasErr, e.apos, "attempting to assign type ", rhs.kind,
                         " to ", lhs.kind
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             else:
                 if e.avar.kind == SimpleVar:
                     let ventry = venv.look e.avar.svs
@@ -371,27 +381,24 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     # this can occur in for-loop counter.
                     if ventry.get.readonly:
                         error hasErr, e.apos, "cannot assign to readonly location."
-                        (42, Type(kind: ErrorT))
+                        (42, ErrorTy)
                     else:
-                        (42, Type(kind: UnitT))
+                        (42, UnitTy)
                 else:
-                    (42, Type(kind: UnitT))
+                    (42, UnitTy)
         of IfExp:
             let (_, tytest) = transExp(hasErr, venv, tenv, e.iftest, loopContext)
             if tytest.kind != IntT:
-                if tytest.kind != ErrorT:
-                    error hasErr, e.ifpos,
+                errorDedup tytest, hasErr, e.ifpos,
                             "if condition must be of type integer but got ", tytest.kind
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             else:
                 let (_, tythen) = transExp(hasErr, venv, tenv, e.then, loopContext)
                 if e.els.isNone:
-                    if tythen.kind == ErrorT:
-                        (42, Type(kind: ErrorT))
-                    elif tythen.kind != UnitT:
-                        error hasErr, e.ifpos,
+                    if tythen.kind != UnitT:
+                        errorDedup tythen, hasErr, e.ifpos,
                                 "if-then branch must not produce a value, got ", tythen
-                        (42, Type(kind: ErrorT))
+                        (42, ErrorTy)
                     else:
                         (42, tythen)
                 else:
@@ -400,50 +407,51 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                         error hasErr, e.ifpos,
                                 "if-then-else branches must have same type, but got then with type ",
                                 tythen, " else with type ", tyelse
-                        (42, Type(kind: ErrorT))
+                        (42, ErrorTy)
                     else:
                         (42, tythen)
         of WhileExp:
             let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest, true)
             if tytest.kind != IntT:
-                error hasErr, e.wpos, "while condition must be of type integer"
-                (42, Type(kind: ErrorT))
+                errorDedup tytest, hasErr, e.wpos, "while condition must be of type integer"
+                (42, ErrorTy)
             else:
                 let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody, true)
                 if tybody.kind != UnitT:
-                    if tybody.kind != ErrorT:
-                        error hasErr, e.wpos, "while body must not produce a value"
-                    (42, Type(kind: ErrorT))
+                    errorDedup tybody, hasErr, e.wpos, "while body must not produce a value"
+                    (42, ErrorTy)
                 else:
-                    (42, Type(kind: UnitT))
+                    (42, UnitTy)
         of ForExp:
             # technically, the
             let (_, tylo) = transExp(hasErr, venv, tenv, e.lo, true)
             let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi, true)
-            if tylo.kind != IntT or tyhi.kind != IntT:
-                error hasErr, e.fpos, "values of for range must be integer"
-                (42, Type(kind: ErrorT))
-            else:
-                venv.beginScope()
-                venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
-                        kind: IntT), readonly: true))
-                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody, true)
-                venv.endScope()
+            var err = false
+            if tylo.kind != IntT:
+                err = true
+                errorDedup tylo, hasErr, e.fpos, "lo of for range must be integer"
+            if tyhi.kind != IntT:
+                err = true
+                errorDedup tyhi, hasErr, e.fpos, "hi of for range must be integer"
+            venv.beginScope()
+            venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
+                    kind: IntT), readonly: true))
+            let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody, true)
+            venv.endScope()
 
-                if tyfbody.kind != UnitT:
-                    if tyfbody.kind != ErrorT:
-                        error hasErr, e.fpos, "for body must not produce a value"
-                    (42, Type(kind: ErrorT))
-                else:
-                    (42, Type(kind: UnitT))
+            if tyfbody.kind != UnitT:
+                errorDedup tyfbody, hasErr, e.fpos, "for body must not produce a value"
+                (42, ErrorTy)
+            else:
+                if err: (42, ErrorTy) else: (42, UnitTy)
         of BreakExp:
             # breaks need to be in context of a while or for, not crossing a procedure
             # call boundary, i.e. if p calls q and break is in q, does not affect p.
             if not loopContext:
                 error hasErr, e.bpos, "break is valid only in a while/for loop"
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             else:
-                (42, Type(kind: UnitT))
+                (42, UnitTy)
         of LetExp:
             tenv.beginScope
             venv.beginScope
@@ -458,24 +466,24 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             let atyOpt = tenv.look e.arrtyp
             if atyOpt.isNone:
                 error hasErr, e.arrpos, "trying to use an undeclared array type ", e.arrtyp.name
-                (42, Type(kind: ErrorT))
+                (42, ErrorTy)
             elif atyOpt.get.kind != ArrayT:
-                error hasErr, e.arrpos, e.arrtyp.name, " is not array type!"
-                (42, Type(kind: ErrorT))
+                errorDedup atyOpt.get, hasErr, e.arrpos, e.arrtyp.name, " is not array type!"
+                (42, ErrorTy)
             else:
                 # check the size and initial values.
                 let (_, tysize) = transExp(hasErr, venv, tenv, e.size, loopContext)
                 if tysize.kind != IntT:
-                    error hasErr, e.arrpos, "must pass integer for array size"
-                    (42, Type(kind: ErrorT))
+                    errorDedup tysize, hasErr, e.arrpos, "must pass integer for array size"
+                    (42, ErrorTy)
                 else:
                     let (_, tyinit) = transExp(hasErr, venv, tenv, e.init, loopContext)
                     # the initializer type must match the array's element type.
                     if tyinit != atyOpt.get.ty:
-                        error hasErr, e.arrpos, "array initializer type is ",
-                                tyinit.kind,
+                        errorDedup tyinit, hasErr, e.arrpos,
+                                "array initializer type is ", tyinit.kind,
                                         " but array is declared with type ", atyOpt.get.ty
-                        (42, Type(kind: ErrorT))
+                        (42, ErrorTy)
                     else:
                         (42, atyOpt.get)
 
@@ -519,7 +527,7 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
                     else:
                         symTyp.add (field.name, tyOpt.get)
             if err:
-                Type(kind: ErrorT)
+                ErrorTy
             else:
                 Type(kind: RecordT, symTy: symTyp, rtt: newTypeTag())
 
@@ -568,7 +576,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
         for dec in d.decs:
             if dec.tdname in seen:
                 error hasErr, dec.tdpos, "the type name ", dec.tdname, " is declared more than once in a sequence of mutually recursive types, which is illegal."
-                tenv.enter dec.tdname, Type(kind: ErrorT)
+                tenv.enter dec.tdname, ErrorTy
             else:
                 seen.incl dec.tdname
                 let ty = transTy(hasErr, tenv, dec.tdty)
@@ -600,7 +608,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
 
             let retTy =
                 if fundec.result.isNone:
-                    Type(kind: UnitT)
+                    UnitTy
                 else:
                     let (ressym, pos) = fundec.result.get
                     let restyOpt = tenv.look ressym
@@ -641,7 +649,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
                     if lookup.isNone:
                         error hasErr, fundec.params[i].pos, funentry.formals[
                                 i].s.name, " is undeclared type."
-                        funentry.formals[i] = Type(kind: ErrorT)
+                        funentry.formals[i] = ErrorTy
                     else:
                         funentry.formals[i] = lookup.get
                 inc i
@@ -650,7 +658,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
                 if lookup.isNone:
                     changed = true
                     error hasErr, fundec.result.get[1], funentry.result.s.name, " is undeclared type."
-                    funentry.result = Type(kind: ErrorT)
+                    funentry.result = ErrorTy
                 else:
                     funentry.result = lookup.get
             if changed:
@@ -685,16 +693,16 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
             let retTyOpt = tenv.look retTypeSym
             if retTyOpt.isNone:
                 error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
-                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
             elif not typesCompatible(tyExp, retTyOpt.get):
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
-                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
             else:
                 venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
-            error hasErr, d.vdpos, "Variable ", d.vdname.name, " is declared with unknown type and initialized with nil. Fix by annotating it with the type you want."
-            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+            errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name, " is declared with unknown type and initialized with nil. Fix by annotating it with the type you want."
+            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
         else:
             # no return type specified. infer it from the initializer.
             venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: tyExp)
