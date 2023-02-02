@@ -509,8 +509,7 @@ nimy tigerParser[Token]:
             prefix.add $2
             return prefix
 
-proc parse*(filename: string): Option[Exp] =
-    var input = readFile(filename)
+proc parseString*(input: string): Option[Exp] =
     var s: LexerState
     var testLexer = tigerLexer.newWithString(s, input)
     var parser = tigerParser.newParser()
@@ -519,3 +518,7 @@ proc parse*(filename: string): Option[Exp] =
         echo "Syntax errors detected."
     return ast
 
+
+proc parse*(filename: string): Option[Exp] =
+    var input = readFile(filename)
+    return parseString(input)

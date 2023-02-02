@@ -34,8 +34,8 @@ proc main() =
     if dumpAst:
         print astOpt.get
 
-    let hasTypeErr = transProg(astOpt.get)
-    if hasTypeErr:
+    let texpOpt = transProg(astOpt.get)
+    if texpOpt.isNone:
         echo "type errors detected, stopping."
         system.quit(-1)
     else:

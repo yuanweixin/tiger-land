@@ -220,6 +220,9 @@ func typesCompatible(a, b: Type): bool =
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         e: absyn.Exp): ExpTy =
+    # note: the case statement uses implicit return
+    # so that we force the compiler to check there
+    # is a return value on all paths.
     result =
         case e.kind
         of OpExp:
@@ -468,6 +471,9 @@ proc transTy*(hasErr: var bool, tenv: var TEnv, ty: absyn.Ty): Type =
     ## translates the type expressions as found in ast to digsted type
     ## description that will be placed into the type environment. it maps
     ## absyn.Ty into semant.Type.
+    # note: the case statement uses implicit return
+    # so that we force the compiler to check there
+    # is a return value on all paths.
     result =
         case ty.kind
         of NameTy: # Id
@@ -636,11 +642,12 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
                     funentry.result = lookup.get
             if changed:
                 # FunEntry is a value type.
-                # we could have written a proc to return a lvalue but
+                # we could have written a proc to return a lvalue from
+                # the env's internal table entry, but
                 # mutation is generally evil and hard to get right, so
                 # here we will just override the existing entry with
                 # the updated one. it will get popped once we exit the
-                # venv scope anyway.
+                # venv scope anyway. call it, the quasi-functional approach.
                 venv.enter fundec.name, funentry
 
         # type check the Exp of the functions.
@@ -668,13 +675,17 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
             elif not typesCompatible(tyExp, retTyOpt.get):
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
+        elif tyExp.kind == NilT:
+            error hasErr, d.vdpos, "Variable ", d.vdname.name, " is declared with unknown type and initialized with nil. Fix by annotating it with the type you want."
         let varEntry = EnvEntry(kind: VarEntry, ty: tyExp)
         venv.enter d.vdname, varEntry
 
-proc transProg*(ast: Exp): bool =
+proc transProg*(ast: Exp): Option[TranslatedExp] =
     var baseTEnv = newBaseTEnv()
     var baseVEnv = newBaseVEnv()
     ## return whether there was type errors.
     var hasErr = false
-    discard transExp(hasErr, baseVEnv, baseTEnv, ast)
-    return hasErr
+    let (texp, _) = transExp(hasErr, baseVEnv, baseTEnv, ast)
+    if hasErr:
+        return none[TranslatedExp]()
+    return some[TranslatedExp](texp)
