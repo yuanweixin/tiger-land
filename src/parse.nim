@@ -372,7 +372,7 @@ nimy tigerParser[Token]:
         Id Dot Id:
             let fvar = VarR(kind: SimpleVar, svs: symbol ($1).val,
                     svp: nimyacctree.getStartPos(1))
-            return VarR(kind: FieldVar, fvar: fvar, fvs: symbol ($1).val,
+            return VarR(kind: FieldVar, fvar: fvar, fvs: symbol ($3).val,
                     fvp: nimyacctree.getStartPos(2))
         Id Lbrack exp Rbrack:
             let subvar = VarR(kind: SimpleVar, svs: symbol ($1).val,

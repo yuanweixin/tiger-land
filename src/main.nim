@@ -4,15 +4,20 @@ import print
 import semant
 import options
 import os
+import print
 
 proc main() =
     var filename = ""
+    var dumpAst = false
     for kind, key, val in getopt():
         case kind
         of cmdArgument:
             filename = key
-        of cmdShortOption, cmdLongOption:
+        of cmdShortOption:
             discard
+        of cmdLongOption:
+            if key == "dumpAst":
+                dumpAst = true
         of cmdEnd:
             # doc says "There is no need to check for cmdEnd while iterating."
             discard
@@ -25,6 +30,10 @@ proc main() =
         system.quit(-1)
     else:
         echo "parsing finished. starting type check."
+
+    if dumpAst:
+        print astOpt.get
+
     let hasTypeErr = transProg(astOpt.get)
     if hasTypeErr:
         echo "type errors detected, stopping."
