@@ -654,7 +654,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
                 inc i
             let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body)
             if not typesCompatible(funentry.result, tyRes) and
-                    funentry.result.kind != ErrorT andtyRes.kind != ErrorT:
+                    funentry.result.kind != ErrorT and tyRes.kind != ErrorT:
                 error hasErr, fundec.pos, "expected return type of ",
                         funentry.result, " for function but got ", tyRes
             venv.endScope()
