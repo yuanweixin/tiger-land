@@ -21,3 +21,15 @@ test "$ Symtab[EnvEntry]":
     for i in 0..100:
         st.enter symbol $i, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
     discard $st
+
+test "var a := nil fails type check":
+    discard
+
+test "var a: my_record := nil type checks":
+    discard
+
+test "nil valid cases in appendix":
+    discard
+
+test "for loop counter cannot be assigned to":
+    discard
