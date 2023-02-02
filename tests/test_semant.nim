@@ -3,6 +3,24 @@ import symbol
 import semant
 import parse
 import options
+import os
+
+test "appel tiger test programs good":
+    for f in walkFiles("tests/tiger_test_programs/semant/good/*"):
+        var input = readFile(f)
+        let astOpt = parseString(input)
+        doAssert astOpt.isSome
+        let texpOpt = transProg(astOpt.get)
+        doAssert texpOpt.isSome, f
+
+test "appel tiger test programs bad":
+    for f in walkFiles("tests/tiger_test_programs/semant/bad/*"):
+        var input = readFile(f)
+        let astOpt = parseString(input)
+        doAssert astOpt.isSome
+        let texpOpt = transProg(astOpt.get)
+        doAssert texpOpt.isNone, f
+
 
 test "Type ==":
     var x, y: semant.Type

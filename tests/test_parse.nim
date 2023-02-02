@@ -6,7 +6,7 @@ import options
 import os
 
 test "good programs":
-  for f in walkFiles("tests/programs/*"):
+  for f in walkFiles("tests/tiger_test_programs/parsing/good/*"):
     var input = readFile(f)
     var s: LexerState
     var testLexer = tigerLexer.newWithString(s, input)
@@ -17,7 +17,7 @@ test "good programs":
     doAssert ast.isSome, f
 
 test "bad programs":
-  for f in walkFiles("tests/programs/bad/*"):
+  for f in walkFiles("tests/tiger_test_programs/parsing/bad/*"):
     var input = readFile(f)
     var s: LexerState
     var testLexer = tigerLexer.newWithString(s, input)

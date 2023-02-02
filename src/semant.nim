@@ -189,7 +189,7 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         of SimpleVar:
             let tyOpt = venv.look v.svs
             if tyOpt.isNone:
-                error hasErr, v.svp, "use of undeclared variable."
+                error hasErr, v.svp, "use of undeclared variable ", v.svs.name
                 (42, ErrorTy)
             else:
                 (42, tyOpt.get.ty)
@@ -214,7 +214,7 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         of SubscriptVar:
             let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar, loopContext)
             if tyLhs.kind != ArrayT:
-                errorDedup tyLhs, hasErr, v.pos, "tried to access a non-array"
+                errorDedup tyLhs, hasErr, v.pos, "tried to access a non-array ", tyLhs.kind
                 (42, ErrorTy)
             else:
                 let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp, loopContext)
@@ -243,10 +243,12 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             case e.oper
             of PlusOp, MinusOp, TimesOp, DivideOp:
                 if tyleft.kind != IntT and tyleft.kind != ErrorT:
-                    error hasErr, e.opos, "integer expected on lhs for arithmetic operator"
+                    error hasErr, e.opos,
+                            "integer expected on lhs for arithmetic operator got ", tyleft.kind
                     (42, ErrorTy)
                 elif tyright.kind != IntT and tyright.kind != ErrorT:
-                    error hasErr, e.opos, "integer expected on rhs for airthmetic operator"
+                    error hasErr, e.opos,
+                            "integer expected on rhs for arithmetic operator but got ", tyright.kind
                     (42, ErrorTy)
                 elif tyleft.kind == ErrorT or tyright.kind == ErrorT:
                     (42, ErrorTy)
@@ -404,7 +406,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 else:
                     let (_, tyelse) = transExp(hasErr, venv, tenv, e.els.get, loopContext)
                     if not typesCompatible(tythen, tyelse):
-                        error hasErr, e.ifpos,
+                        if tythen.kind != ErrorT and tyelse.kind != ErrorT:
+                            error hasErr, e.ifpos,
                                 "if-then-else branches must have same type, but got then with type ",
                                 tythen, " else with type ", tyelse
                         (42, ErrorTy)
@@ -552,7 +555,7 @@ proc fixup(hasErr: var bool, tenv: var TEnv, tofix: var Type, pos: pos) =
             if typ.kind == NameT:
                 let tyopt = tenv.look typ.s
                 if tyopt.isNone:
-                    error hasErr, pos, typ.s, " is undeclared type."
+                    error hasErr, pos, typ.s.name, " is undeclared type."
                 else:
                     typ = tyopt.get
     else:
@@ -575,7 +578,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
         var tofixup: seq[(Type, pos)]
         for dec in d.decs:
             if dec.tdname in seen:
-                error hasErr, dec.tdpos, "the type name ", dec.tdname, " is declared more than once in a sequence of mutually recursive types, which is illegal."
+                error hasErr, dec.tdpos, "the type name ", dec.tdname.name, " is declared more than once in a sequence of mutually recursive types, which is illegal."
                 tenv.enter dec.tdname, ErrorTy
             else:
                 seen.incl dec.tdname
@@ -600,7 +603,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
         var tofixup: seq[(Type, pos)]
         for fundec in d.fundecs:
             if fundec.name in seen:
-                error hasErr, fundec.pos, fundec.name, " is declared more than once in a sequence of mutually recursive types, which is illegal."
+                error hasErr, fundec.pos, fundec.name.name, " is declared more than once in a sequence of mutually recursive types, which is illegal."
                 # probably need to insert an error entry here so that later
                 # typechecks of function body fails or knows to error?
             else:
