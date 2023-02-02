@@ -29,6 +29,22 @@ tiger-land was a typo when I made the repo, but it sounds way cooler than tiger-
 
 I rolled my own lexer and parser generators. They took more effort than expected, but are quite fun to implement and get right. 
 
+# Build
+
+nim c -d:release src/main.nim
+
+# Run
+
+(Assuming your exe is in src)
+
+./src/main
+
+# Usage (of the tiger compiler)
+
+## Flags
+
+TBD
+
 # Mini-review of the Nim language
 Nim was chosen because 
 * I needed a hobby language that have good performance. 
