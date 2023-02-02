@@ -168,10 +168,10 @@ proc error (hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     echo pos, " ", msg.join("")
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
-        e: absyn.Exp): ExpTy
+        e: absyn.Exp, loopContext: bool): ExpTy
 
 proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
-        v: absyn.VarR): ExpTy =
+        v: absyn.VarR, loopContext: bool): ExpTy =
     result =
         case v.kind
         of SimpleVar:
@@ -182,7 +182,7 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             else:
                 (42, tyOpt.get.ty)
         of FieldVar: # id.id
-            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar)
+            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.fvar, loopContext)
             if tyLhs.kind == ErrorT:
                 (42, Type(kind: ErrorT))
             elif tyLhs.kind != RecordT:
@@ -201,33 +201,34 @@ proc transVar*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 else:
                     (42, ret)
         of SubscriptVar:
-            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar)
+            let (_, tyLhs) = transVar(hasErr, venv, tenv, v.subvar, loopContext)
             if tyLhs.kind != ArrayT:
                 error hasErr, v.pos, "tried to access a non-array"
                 (42, Type(kind: ErrorT))
             else:
-                let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp)
+                let (_, tyExp) = transExp(hasErr, venv, tenv, v.exp, loopContext)
                 if tyExp.kind != IntT:
                     error hasErr, v.pos, "array index is not an integer!"
                     (42, Type(kind: ErrorT))
                 else:
                     (42, tyLhs.ty)
 
-proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec)
+proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
+        loopContext: bool)
 
 func typesCompatible(a, b: Type): bool =
     return a == b or (a.kind, b.kind) in [(NilT, RecordT), (RecordT, NilT)]
 
 proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
-        e: absyn.Exp): ExpTy =
+        e: absyn.Exp, loopContext: bool): ExpTy =
     # note: the case statement uses implicit return
     # so that we force the compiler to check there
     # is a return value on all paths.
     result =
         case e.kind
         of OpExp:
-            let (_, tyleft) = transExp(hasErr, venv, tenv, e.left)
-            let (_, tyright) = transExp(hasErr, venv, tenv, e.right)
+            let (_, tyleft) = transExp(hasErr, venv, tenv, e.left, loopContext)
+            let (_, tyright) = transExp(hasErr, venv, tenv, e.right, loopContext)
             case e.oper
             of PlusOp, MinusOp, TimesOp, DivideOp:
                 if tyleft.kind != IntT and tyleft.kind != ErrorT:
@@ -275,7 +276,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         of IntExp:
             (42, Type(kind: IntT))
         of VarExp:
-            let (_, tyv) = transVar(hasErr, venv, tenv, e.v)
+            let (_, tyv) = transVar(hasErr, venv, tenv, e.v, loopContext)
             (42, tyv)
         of StringExp:
             (42, Type(kind: StringT))
@@ -295,7 +296,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             else:
                 var err = false
                 for i in 0..e.args.high:
-                    let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i])
+                    let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i], loopContext)
                     if tyargi.kind == ErrorT or fentryOpt.get.formals[i].kind == ErrorT:
                         err = true
                         break
@@ -327,7 +328,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     for (sym, exp, pos) in e.fields:
                         for (symInTy, typExpected) in expRecTy.symTy:
                             if sym == symInTy:
-                                let (_, tyActual) = transExp(hasErr, venv, tenv, exp)
+                                let (_, tyActual) = transExp(hasErr, venv, tenv,
+                                        exp, loopContext)
                                 if not typesCompatible(typExpected, tyActual):
                                     err = true
                                     error hasErr, pos, sym.name,
@@ -341,7 +343,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             var i = 0
             var retVal: Type = nil
             while i < e.eplist.len:
-                let (_, tyExp) = transExp(hasErr, venv, tenv, e.eplist[i][0])
+                let (_, tyExp) = transExp(hasErr, venv, tenv, e.eplist[i][0], loopContext)
                 inc i
                 if i == e.eplist.len:
                     retVal = tyExp
@@ -351,8 +353,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 (42, retVal)
         of AssignExp:
             # nil can be assigned to record type vars
-            let (_, lhs) = transVar(hasErr, venv, tenv, e.avar)
-            let (_, rhs) = transExp(hasErr, venv, tenv, e.aexp)
+            let (_, lhs) = transVar(hasErr, venv, tenv, e.avar, loopContext)
+            let (_, rhs) = transExp(hasErr, venv, tenv, e.aexp, loopContext)
             if lhs.kind == ErrorT or rhs.kind == ErrorT:
                 (42, Type(kind: ErrorT))
             elif rhs.kind == NilT and lhs.kind != RecordT:
@@ -375,14 +377,14 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 else:
                     (42, Type(kind: UnitT))
         of IfExp:
-            let (_, tytest) = transExp(hasErr, venv, tenv, e.iftest)
+            let (_, tytest) = transExp(hasErr, venv, tenv, e.iftest, loopContext)
             if tytest.kind != IntT:
                 if tytest.kind != ErrorT:
                     error hasErr, e.ifpos,
                             "if condition must be of type integer but got ", tytest.kind
                 (42, Type(kind: ErrorT))
             else:
-                let (_, tythen) = transExp(hasErr, venv, tenv, e.then)
+                let (_, tythen) = transExp(hasErr, venv, tenv, e.then, loopContext)
                 if e.els.isNone:
                     if tythen.kind == ErrorT:
                         (42, Type(kind: ErrorT))
@@ -393,7 +395,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     else:
                         (42, tythen)
                 else:
-                    let (_, tyelse) = transExp(hasErr, venv, tenv, e.els.get)
+                    let (_, tyelse) = transExp(hasErr, venv, tenv, e.els.get, loopContext)
                     if not typesCompatible(tythen, tyelse):
                         error hasErr, e.ifpos,
                                 "if-then-else branches must have same type, but got then with type ",
@@ -402,20 +404,24 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     else:
                         (42, tythen)
         of WhileExp:
-            let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest)
+            # TODO
+            let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest, loopContext)
             if tytest.kind != IntT:
                 error hasErr, e.wpos, "while condition must be of type integer"
                 (42, Type(kind: ErrorT))
             else:
-                let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody)
+                # TODO
+                let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody, loopContext)
                 if tybody.kind != UnitT:
-                    error hasErr, e.wpos, "while body must not produce a value"
+                    if tybody.kind != ErrorT:
+                        error hasErr, e.wpos, "while body must not produce a value"
                     (42, Type(kind: ErrorT))
                 else:
                     (42, Type(kind: UnitT))
         of ForExp:
-            let (_, tylo) = transExp(hasErr, venv, tenv, e.lo)
-            let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi)
+            # technically, the
+            let (_, tylo) = transExp(hasErr, venv, tenv, e.lo, loopContext)
+            let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi, loopContext)
             if tylo.kind != IntT or tyhi.kind != IntT:
                 error hasErr, e.fpos, "values of for range must be integer"
                 (42, Type(kind: ErrorT))
@@ -423,7 +429,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 venv.beginScope()
                 venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
                         kind: IntT), readonly: true))
-                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody)
+                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody, loopContext)
                 venv.endScope()
 
                 if tyfbody.kind != UnitT:
@@ -441,8 +447,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             tenv.beginScope
             venv.beginScope
             for dec in e.decs:
-                transDec(hasErr, venv, tenv, dec)
-            let (_, tyExp) = transExp(hasErr, venv, tenv, e.letbody)
+                transDec(hasErr, venv, tenv, dec, loopContext)
+            let (_, tyExp) = transExp(hasErr, venv, tenv, e.letbody, loopContext)
             tenv.endScope
             venv.endScope
             (42, tyExp)
@@ -457,12 +463,12 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 (42, Type(kind: ErrorT))
             else:
                 # check the size and initial values.
-                let (_, tysize) = transExp(hasErr, venv, tenv, e.size)
+                let (_, tysize) = transExp(hasErr, venv, tenv, e.size, loopContext)
                 if tysize.kind != IntT:
                     error hasErr, e.arrpos, "must pass integer for array size"
                     (42, Type(kind: ErrorT))
                 else:
-                    let (_, tyinit) = transExp(hasErr, venv, tenv, e.init)
+                    let (_, tyinit) = transExp(hasErr, venv, tenv, e.init, loopContext)
                     # the initializer type must match the array's element type.
                     if tyinit != atyOpt.get.ty:
                         error hasErr, e.arrpos, "array initializer type is ",
@@ -545,7 +551,8 @@ proc fixup(hasErr: var bool, tenv: var TEnv, tofix: var Type, pos: pos) =
             doAssert tofix.kind == ErrorT, "bug in impl, expecting only ErrorT to show in the else branch of case statement for fixing up missing types."
         discard # ErrorT could show up here.
 
-proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
+proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
+        loopContext: bool) =
     case d.kind
     of TypeDec: # seq[type id eq ty] 
         # spec from appendix:
@@ -664,14 +671,14 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
                 let varEntry = EnvEntry(kind: VarEntry, ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i
-            let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body)
+            let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body, loopContext)
             if not typesCompatible(funentry.result, tyRes) and
                     funentry.result.kind != ErrorT and tyRes.kind != ErrorT:
                 error hasErr, fundec.pos, "expected return type of ",
                         funentry.result, " for function but got ", tyRes
             venv.endScope()
     of VarDec: # Var Id type_opt Assign exp:
-        let (_, tyExp) = transExp(hasErr, venv, tenv, d.init)
+        let (_, tyExp) = transExp(hasErr, venv, tenv, d.init, loopContext)
         if d.vdtyp.isSome:
             let (retTypeSym, pos) = d.vdtyp.get
             let retTyOpt = tenv.look retTypeSym
@@ -696,7 +703,8 @@ proc transProg*(ast: Exp): Option[TranslatedExp] =
     var baseVEnv = newBaseVEnv()
     ## return whether there was type errors.
     var hasErr = false
-    let (texp, _) = transExp(hasErr, baseVEnv, baseTEnv, ast)
+    let (texp, _) = transExp(hasErr, baseVEnv, baseTEnv, ast,
+            loopContext = false)
     if hasErr:
         return none[TranslatedExp]()
     return some[TranslatedExp](texp)
