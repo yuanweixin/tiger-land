@@ -36,11 +36,23 @@ test "var a := nil fails type check":
         echo "unexpected, textOpt.get is ", texpOpt.get
     check texpOpt.isNone
 
-test "var a: my_record := nil type checks":
-    discard
-
 test "nil valid cases in appendix":
-    discard
+    let source = """let 
+    type any = {any: int}
+    var a : any := nil
+    function f(a: any) : int = 100
+    in 
+    a := nil;
+    if a <> nil then 1 else 1;
+    if nil <> a then 2 else 2;
+    if a = nil then 3 else 3;
+    if nil = a then 4 else 4;
+    f(nil)
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
 test "a == nil where type(a)==RecordT":
     discard

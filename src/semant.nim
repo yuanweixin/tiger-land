@@ -356,9 +356,9 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             if lhs.kind == ErrorT or rhs.kind == ErrorT:
                 (42, Type(kind: ErrorT))
             elif rhs.kind == NilT and lhs.kind != RecordT:
-                error hasErr, e.apos, "nil can only be assigned to a record type"
+                error hasErr, e.apos, "nil can only be assigned to a record type but is being assigned to ", lhs
                 (42, Type(kind: ErrorT))
-            elif lhs.kind != rhs.kind:
+            elif not typesCompatible(lhs, rhs):
                 error hasErr, e.apos, "attempting to assign type ", rhs.kind,
                         " to ", lhs.kind
                 (42, Type(kind: ErrorT))
@@ -672,13 +672,19 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec) =
             let retTyOpt = tenv.look retTypeSym
             if retTyOpt.isNone:
                 error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
+                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
             elif not typesCompatible(tyExp, retTyOpt.get):
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
+                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+            else:
+                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
             error hasErr, d.vdpos, "Variable ", d.vdname.name, " is declared with unknown type and initialized with nil. Fix by annotating it with the type you want."
-        let varEntry = EnvEntry(kind: VarEntry, ty: tyExp)
-        venv.enter d.vdname, varEntry
+            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+        else:
+            # no return type specified. infer it from the initializer.
+            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: tyExp)
 
 proc transProg*(ast: Exp): Option[TranslatedExp] =
     var baseTEnv = newBaseTEnv()
