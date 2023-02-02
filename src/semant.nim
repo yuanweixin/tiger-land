@@ -384,8 +384,11 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             else:
                 let (_, tythen) = transExp(hasErr, venv, tenv, e.then)
                 if e.els.isNone:
-                    if tythen.kind != UnitT:
-                        error hasErr, e.ifpos, "if-then branch must not produce a value"
+                    if tythen.kind == ErrorT:
+                        (42, Type(kind: ErrorT))
+                    elif tythen.kind != UnitT:
+                        error hasErr, e.ifpos,
+                                "if-then branch must not produce a value, got ", tythen
                         (42, Type(kind: ErrorT))
                     else:
                         (42, tythen)
@@ -422,8 +425,10 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                         kind: IntT), readonly: true))
                 let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody)
                 venv.endScope()
+
                 if tyfbody.kind != UnitT:
-                    error hasErr, e.fpos, "for body must not produce a value"
+                    if tyfbody.kind != ErrorT:
+                        error hasErr, e.fpos, "for body must not produce a value"
                     (42, Type(kind: ErrorT))
                 else:
                     (42, Type(kind: UnitT))

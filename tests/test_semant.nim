@@ -54,87 +54,187 @@ test "nil valid cases in appendix":
     let texpOpt = transProg(astOpt.get)
     check texpOpt.isSome
 
-test "a == nil where type(a)==RecordT":
-    discard
-
-test "a <> nil where type(a)==RecordT":
-    discard
-
-test "f(nil) where f expects a RecordT":
-    discard
-
 test "record a{f1=nil,...} works":
-    discard
+    let source = """let 
+    type any = {any: int, x: any}
+    var a : any := any{any=1, x=nil}
+    in 
+    42
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
 test "if...then... can both return nil":
-    discard
+    let source = """let 
+    type any = {any: int}
+    in 
+    if 1 = 1 then nil else nil
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
 test "if...then..., if returns RecordT, then returns nil":
-    discard
+    let source = """let 
+    type any = {any: int}
+    var a: any := any{any=1}
+    in 
+    if 1 = 1 then a else nil
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
 test "if...then..., if returns nil, then returns RecordT":
-    discard
+    let source = """let 
+    type any = {any: int}
+    var a: any := any{any=1}
+    in 
+    if 1 = 1 then nil else a
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
-test "function a() = ... where body returns nil":
-    discard
+test "function a() : some_record = ... where body returns nil":
+    let source = """let 
+    type any = {any: int}
+    function f(a: any) : any = nil
+    in 
+    f(nil)
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
-test "function a() = ... where body returns unit":
-    discard
-
-test "function a(): RecordT = ... where body returns nil":
-    discard
-
-test "var a : RecordT := ... where body returns nil":
-    discard
+test "function a() = () should be accepted":
+    let source = """let 
+    function f() = ()
+    in 
+    f()
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
 test "for loop counter cannot be assigned to":
-    discard
+    let source = """let 
+    in 
+    for r := 0 to 10 do 
+        if 1 = 1 then r := 1; ()
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
 
 test "records same but separate decls are distinct types":
-    discard
+    let source = """let 
+    type any1 = {any: int}
+    type any2 = {any: int}
+    var a : any1 := nil
+    var b : any2 := nil
+    in 
+    a = b 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
 
 test "arrays same but separate decls are distinct types":
-    discard
-
-test "nil value in initializing expression of var decl require long form (specify :type_id)":
-    discard
+    let source = """let 
+    type arr1 = array of int
+    type arr2 = array of int
+    var a1 := arr1[8] of 0 
+    var a2 := arr2[8] of 0
+    in 
+    a1 = a2
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
 
 test "local redeclarations, appendix example":
-    discard
+    let source = """
+    let 
+        function print(v:int) = ()
+        function f(v:int) = 
+        let var v := 6
+            in print(v);
+            let var v := 7 in print (v) end;
+            print(v);
+            let var v := 8 in print (v) end;
+            print (v)
+        end
+    in 
+    ()
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
-test "break not in while fails":
-    discard
+test "break not in while/for fails":
+    let source = """
+    let 
+    in 
+        break
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
 
-test "break not in for fails":
-    discard
+test "break in a while loop is legal":
+    let source = """
+    let 
+    in 
+        while 1 = 1 do
+            break
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
-test "standard library print call":
-    discard
+test "break in a for loop is legal":
+    let source = """
+    let 
+    in 
+        for i :=0 to 100 do
+            break
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
-test "standard library flush call":
-    discard
-
-test "standard library getchar call":
-    discard
-
-test "standard library ord call":
-    discard
-
-test "standard library chr call":
-    discard
-
-test "standard library size call":
-    discard
-
-test "standard library substring call":
-    discard
-
-test "standard library concat call":
-    discard
-
-test "standard library not call":
-    discard
-
-test "standard library exit call":
-    discard
+test "standard library calls":
+    let source = """
+    let 
+    in 
+        print("die");
+        flush();
+        getchar();
+        ord("");
+        chr(0);
+        size("");
+        substring("hello", 0, 1);
+        concat("h","i");
+        not(1);
+        exit(1)
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
 
