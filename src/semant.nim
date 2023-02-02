@@ -296,7 +296,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             else:
                 var err = false
                 for i in 0..e.args.high:
-                    let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i], loopContext)
+                    let (_, tyargi) = transExp(hasErr, venv, tenv, e.args[i], false)
                     if tyargi.kind == ErrorT or fentryOpt.get.formals[i].kind == ErrorT:
                         err = true
                         break
@@ -404,14 +404,12 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     else:
                         (42, tythen)
         of WhileExp:
-            # TODO
-            let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest, loopContext)
+            let (_, tytest) = transExp(hasErr, venv, tenv, e.wtest, true)
             if tytest.kind != IntT:
                 error hasErr, e.wpos, "while condition must be of type integer"
                 (42, Type(kind: ErrorT))
             else:
-                # TODO
-                let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody, loopContext)
+                let (_, tybody) = transExp(hasErr, venv, tenv, e.wbody, true)
                 if tybody.kind != UnitT:
                     if tybody.kind != ErrorT:
                         error hasErr, e.wpos, "while body must not produce a value"
@@ -420,8 +418,8 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                     (42, Type(kind: UnitT))
         of ForExp:
             # technically, the
-            let (_, tylo) = transExp(hasErr, venv, tenv, e.lo, loopContext)
-            let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi, loopContext)
+            let (_, tylo) = transExp(hasErr, venv, tenv, e.lo, true)
+            let (_, tyhi) = transExp(hasErr, venv, tenv, e.hi, true)
             if tylo.kind != IntT or tyhi.kind != IntT:
                 error hasErr, e.fpos, "values of for range must be integer"
                 (42, Type(kind: ErrorT))
@@ -429,7 +427,7 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 venv.beginScope()
                 venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
                         kind: IntT), readonly: true))
-                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody, loopContext)
+                let (_, tyfbody) = transExp(hasErr, venv, tenv, e.fbody, true)
                 venv.endScope()
 
                 if tyfbody.kind != UnitT:
@@ -441,8 +439,11 @@ proc transExp*(hasErr: var bool, venv: var VEnv, tenv: var TEnv,
         of BreakExp:
             # breaks need to be in context of a while or for, not crossing a procedure
             # call boundary, i.e. if p calls q and break is in q, does not affect p.
-            # TODO fix this in part b.
-            (42, Type(kind: UnitT))
+            if not loopContext:
+                error hasErr, e.bpos, "break is valid only in a while/for loop"
+                (42, Type(kind: ErrorT))
+            else:
+                (42, Type(kind: UnitT))
         of LetExp:
             tenv.beginScope
             venv.beginScope
@@ -671,7 +672,7 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
                 let varEntry = EnvEntry(kind: VarEntry, ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i
-            let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body, loopContext)
+            let (_, tyRes) = transExp(hasErr, venv, tenv, fundec.body, false)
             if not typesCompatible(funentry.result, tyRes) and
                     funentry.result.kind != ErrorT and tyRes.kind != ErrorT:
                 error hasErr, fundec.pos, "expected return type of ",
