@@ -5,24 +5,45 @@ import parse
 import options
 import os
 
+proc testInput(input: string, expectGood: bool) =
+    let astOpt = parseString(input)
+    doAssert astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    if expectGood:
+        doAssert texpOpt.isSome
+    else:
+        doAssert texpOpt.isNone
+
+proc testInputIsGood(input: string) =
+    testInput input, true
+
+proc testInputIsBad(input: string) =
+    testInput input, false
+
+proc testBad(input: string) =
+    let astOpt = parseString(input)
+    doAssert astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    doAssert texpOpt.isNone
+
+proc testFile(f: string, expectGood: bool) =
+    echo "\ntesting with input: ", f
+    var input = readFile(f)
+    let astOpt = parseString(input)
+    doAssert astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    if expectGood:
+        doAssert texpOpt.isSome, f
+    else:
+        doAssert texpOpt.isNone, f
+
 test "appel tiger test programs good":
     for f in walkFiles("tests/tiger_test_programs/semant/good/*"):
-        echo "\ntesting with input: ", f
-        var input = readFile(f)
-        let astOpt = parseString(input)
-        doAssert astOpt.isSome
-        let texpOpt = transProg(astOpt.get)
-        doAssert texpOpt.isSome, f
+        testFile f, true
 
 test "appel tiger test programs bad":
     for f in walkFiles("tests/tiger_test_programs/semant/bad/*"):
-        echo "\ntesting with input: ", f
-        var input = readFile(f)
-        let astOpt = parseString(input)
-        doAssert astOpt.isSome
-        let texpOpt = transProg(astOpt.get)
-        doAssert texpOpt.isNone, f
-
+        testFile f, false
 
 test "Type ==":
     var x, y: semant.Type
@@ -49,12 +70,7 @@ test "var a := nil fails type check":
     var a := nil
     in 1 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    if texpOpt.isSome:
-        echo "unexpected, textOpt.get is ", texpOpt.get
-    check texpOpt.isNone
+    testInputIsBad source
 
 test "nil valid cases in appendix":
     let source = """let 
@@ -69,10 +85,7 @@ test "nil valid cases in appendix":
     if nil = a then 4 else 4;
     f(nil)
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
 
 test "record a{f1=nil,...} works":
     let source = """let 
@@ -81,10 +94,8 @@ test "record a{f1=nil,...} works":
     in 
     42
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "if...then... can both return nil":
     let source = """let 
@@ -92,10 +103,8 @@ test "if...then... can both return nil":
     in 
     if 1 = 1 then nil else nil
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "if...then..., if returns RecordT, then returns nil":
     let source = """let 
@@ -104,10 +113,8 @@ test "if...then..., if returns RecordT, then returns nil":
     in 
     if 1 = 1 then a else nil
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "if...then..., if returns nil, then returns RecordT":
     let source = """let 
@@ -116,10 +123,8 @@ test "if...then..., if returns nil, then returns RecordT":
     in 
     if 1 = 1 then nil else a
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "function a() : some_record = ... where body returns nil":
     let source = """let 
@@ -128,10 +133,8 @@ test "function a() : some_record = ... where body returns nil":
     in 
     f(nil)
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "function a() = () should be accepted":
     let source = """let 
@@ -139,10 +142,8 @@ test "function a() = () should be accepted":
     in 
     f()
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "for loop counter cannot be assigned to":
     let source = """let 
@@ -150,10 +151,8 @@ test "for loop counter cannot be assigned to":
     for r := 0 to 10 do 
         if 1 = 1 then r := 1; ()
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "records same but separate decls are distinct types":
     let source = """let 
@@ -164,10 +163,8 @@ test "records same but separate decls are distinct types":
     in 
     a = b 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "arrays same but separate decls are distinct types":
     let source = """let 
@@ -178,10 +175,8 @@ test "arrays same but separate decls are distinct types":
     in 
     a1 = a2
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "local redeclarations, appendix example":
     let source = """
@@ -198,10 +193,8 @@ test "local redeclarations, appendix example":
     in 
     ()
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "break not in while/for fails":
     let source = """
@@ -209,10 +202,8 @@ test "break not in while/for fails":
     in 
         break
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "break in a while loop is legal":
     let source = """
@@ -221,10 +212,8 @@ test "break in a while loop is legal":
         while 1 = 1 do
             break
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "break in a for loop is legal":
     let source = """
@@ -233,10 +222,8 @@ test "break in a for loop is legal":
         for i :=0 to 100 do
             break
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "standard library calls":
     let source = """
@@ -253,10 +240,8 @@ test "standard library calls":
         not(1);
         exit(1)
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "circular to self bad":
     let source = """
@@ -264,10 +249,8 @@ test "circular to self bad":
         type a = a 
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "circular through seq of type decls bad":
     let source = """
@@ -276,10 +259,8 @@ test "circular through seq of type decls bad":
         type b = a 
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isNone
+    testInputIsBad source
+
 
 test "circular self through array okay":
     let source = """
@@ -287,10 +268,8 @@ test "circular self through array okay":
         type a = array of a 
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "circular self through record okay":
     let source = """
@@ -298,10 +277,8 @@ test "circular self through record okay":
         type a = {x: a}
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "circular nonself through array ok":
     let source = """
@@ -310,10 +287,8 @@ test "circular nonself through array ok":
         type b = array of a 
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
 
 test "circular nonself through record ok":
     let source = """
@@ -322,7 +297,6 @@ test "circular nonself through record ok":
         type b = {x: a}
     in 
     end"""
-    let astOpt = parseString(source)
-    check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
-    check texpOpt.isSome
+    testInputIsGood source
+
+
