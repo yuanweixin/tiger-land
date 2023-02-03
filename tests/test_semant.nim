@@ -258,3 +258,71 @@ test "standard library calls":
     let texpOpt = transProg(astOpt.get)
     check texpOpt.isSome
 
+test "circular to self bad":
+    let source = """
+    let 
+        type a = a 
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
+
+test "circular through seq of type decls bad":
+    let source = """
+    let 
+        type a = b
+        type b = a 
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isNone
+
+test "circular self through array okay":
+    let source = """
+    let 
+        type a = array of a 
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
+
+test "circular self through record okay":
+    let source = """
+    let 
+        type a = {x: a}
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
+
+test "circular nonself through array ok":
+    let source = """
+    let 
+        type a = b 
+        type b = array of a 
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
+
+test "circular nonself through record ok":
+    let source = """
+    let 
+        type a = b 
+        type b = {x: a}
+    in 
+    end"""
+    let astOpt = parseString(source)
+    check astOpt.isSome
+    let texpOpt = transProg(astOpt.get)
+    check texpOpt.isSome
