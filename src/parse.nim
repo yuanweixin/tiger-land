@@ -355,6 +355,8 @@ nimy tigerParser[Token]:
             return $2
     field_value_list[seq[(Symbol, Exp, pos)]]:
         # a = <exp>, totally different from fields which is a : <some type id>
+        []:
+            return @[]
         Id Eq exp:
             return @[(symbol ($1).val, $3,
                     nimyacctree.getStartPos(2))]
@@ -479,6 +481,8 @@ nimy tigerParser[Token]:
         Id:
             return Ty(kind: NameTy, nts: symbol ($1).val,
                     ntpos: nimyacctree.getStartPos(1))
+        Lbrace Rbrace:
+            return Ty(kind: RecordTy, rtyfields: @[])
         Lbrace fields Rbrace:
             return Ty(kind: RecordTy, rtyfields: $2)
         Array Of Id:
@@ -509,8 +513,7 @@ nimy tigerParser[Token]:
             prefix.add $2
             return prefix
 
-proc parse*(filename: string): Option[Exp] =
-    var input = readFile(filename)
+proc parseString*(input: string): Option[Exp] =
     var s: LexerState
     var testLexer = tigerLexer.newWithString(s, input)
     var parser = tigerParser.newParser()
@@ -519,3 +522,7 @@ proc parse*(filename: string): Option[Exp] =
         echo "Syntax errors detected."
     return ast
 
+
+proc parse*(filename: string): Option[Exp] =
+    var input = readFile(filename)
+    return parseString(input)

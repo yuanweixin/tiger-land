@@ -3,24 +3,26 @@ import unittest
 import nimyacc
 import print
 import options
+import os
 
-test "no error in merge.tig":
-  var input = readFile("tests/merge.tig")
-  var s: LexerState
-  var testLexer = tigerLexer.newWithString(s, input)
+test "good programs":
+  for f in walkFiles("tests/tiger_test_programs/parsing/good/*"):
+    var input = readFile(f)
+    var s: LexerState
+    var testLexer = tigerLexer.newWithString(s, input)
 
-  var parser = tigerParser.newParser()
-  let ast = parser.parse_tigerParser(testLexer)
-  check parser.hasError == false
-  check ast.isSome
+    var parser = tigerParser.newParser()
+    let ast = parser.parse_tigerParser(testLexer)
+    doAssert parser.hasError == false, f
+    doAssert ast.isSome, f
 
-test "no error in queens.tig":
-  var input = readFile("tests/queens.tig")
-  var s: LexerState
-  var testLexer = tigerLexer.newWithString(s, input)
+test "bad programs":
+  for f in walkFiles("tests/tiger_test_programs/parsing/bad/*"):
+    var input = readFile(f)
+    var s: LexerState
+    var testLexer = tigerLexer.newWithString(s, input)
 
-  var parser = tigerParser.newParser()
-  let ast = parser.parse_tigerParser(testLexer)
-  check parser.hasError == false
-  check ast.isSome
-
+    var parser = tigerParser.newParser()
+    let ast = parser.parse_tigerParser(testLexer)
+    doAssert parser.hasError, f
+    doAssert ast.isNone, f
