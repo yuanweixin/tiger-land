@@ -587,6 +587,19 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
                 tofixup.add (ty, dec.tdpos)
         when defined(tigerdevel):
             echo "tofixup: ", $tofixup
+        # cycle detection: if it's all NameT back to the dec it's bad.
+        for dec in d.decs:
+            seen.clear # reuse.
+            var ty = (tenv.look dec.tdname).get
+            seen.incl dec.tdname
+            while ty.kind == NameT:
+                if ty.s in seen:
+                    error hasErr, dec.tdpos,
+                            "circular type definition detected for type ",
+                            dec.tdname.name
+                    break
+                seen.incl ty.s
+                ty = (tenv.look ty.s).get
         # now fix up the stuff we just added.
         for (tofix, pos) in tofixup.mitems():
             fixup(hasErr, tenv, tofix, pos)
@@ -600,12 +613,9 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
         # are declared by a seq of conseq func declarations with no intervening
         # type or var decls.
         var seen: HashSet[Symbol]
-        var tofixup: seq[(Type, pos)]
         for fundec in d.fundecs:
             if fundec.name in seen:
                 error hasErr, fundec.pos, fundec.name.name, " is declared more than once in a sequence of mutually recursive types, which is illegal."
-                # probably need to insert an error entry here so that later
-                # typechecks of function body fails or knows to error?
             else:
                 seen.incl fundec.name
 
@@ -613,12 +623,10 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
                 if fundec.result.isNone:
                     UnitTy
                 else:
-                    let (ressym, pos) = fundec.result.get
+                    let (ressym, _) = fundec.result.get
                     let restyOpt = tenv.look ressym
                     if restyOpt.isNone:
-                        let t = Type(kind: NameT, s: ressym)
-                        tofixup.add (t, pos)
-                        t
+                        ErrorTy
                     else:
                         restyOpt.get
 
@@ -626,53 +634,12 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
             for field in fundec.params:
                 let fieldTyOpt = tenv.look field.typ
                 if fieldTyOpt.isNone:
-                    let t = Type(kind: NameT, s: field.typ)
-                    tofixup.add (t, field.pos)
-                    formals.add t
+                    formals.add ErrorTy
                 else:
                     formals.add fieldTyOpt.get
             var funentry = EnvEntry(kind: FunEntry, formals: formals, result: retTy)
 
             venv.enter fundec.name, funentry
-
-        # do the fix up.
-        for fundec in d.fundecs:
-            var funentry = (venv.look fundec.name).get
-            var changed = false
-            when defined(tigerdevel):
-                doAssert funentry.formals.len == fundec.params.len,
-                        "bug, FunEntry.formals different len than in AST, funentry.formals.len=" &
-                        $funentry.formals.len & " fundec.params.len=" &
-                        $fundec.params.len
-            var i = 0
-            while i < fundec.params.len:
-                if funentry.formals[i].kind == NameT:
-                    changed = true
-                    let lookup = tenv.look funentry.formals[i].s
-                    if lookup.isNone:
-                        error hasErr, fundec.params[i].pos, funentry.formals[
-                                i].s.name, " is undeclared type."
-                        funentry.formals[i] = ErrorTy
-                    else:
-                        funentry.formals[i] = lookup.get
-                inc i
-            if funentry.result.kind == NameT:
-                let lookup = tenv.look funentry.result.s
-                if lookup.isNone:
-                    changed = true
-                    error hasErr, fundec.result.get[1], funentry.result.s.name, " is undeclared type."
-                    funentry.result = ErrorTy
-                else:
-                    funentry.result = lookup.get
-            if changed:
-                # FunEntry is a value type.
-                # we could have written a proc to return a lvalue from
-                # the env's internal table entry, but
-                # mutation is generally evil and hard to get right, so
-                # here we will just override the existing entry with
-                # the updated one. it will get popped once we exit the
-                # venv scope anyway. call it, the quasi-functional approach.
-                venv.enter fundec.name, funentry
 
         # type check the Exp of the functions.
         for fundec in d.fundecs:
@@ -704,7 +671,9 @@ proc transDec*(hasErr: var bool, venv: var VEnv, tenv: var TEnv, d: absyn.Dec,
             else:
                 venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
-            errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name, " is declared with unknown type and initialized with nil. Fix by annotating it with the type you want."
+            errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name,
+                    " is declared with unknown type and initialized with nil. Fix by using the long form, e.g. var ",
+                    d.vdname.name, " : <my_type> = ..."
             venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
         else:
             # no return type specified. infer it from the initializer.
