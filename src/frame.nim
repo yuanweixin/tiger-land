@@ -2,20 +2,29 @@ import temp
 
 type
         AccessKind* = enum
-                InFrame
+                InFrame 
                 InReg
 
         Access* = object
                 case kind*: AccessKind
                 of InFrame:
+                        ## indicates mem loc at offset x from frame pointer
                         frame*: int
                 of InReg:
+                        ## Indicates an abstract register 
                         reg*: Temp
 
-        Frame* = concept x, var vf, ptr px, type F
-                newFrame(Label, seq[bool]) is F
-                name(px) is Label
-                formals(px): seq[Access]
-                ## second parameter means whether parameter escapes.
-                allocLocal(vf, bool): Access
+        ## whether a local var or func param "escapes", 
+        ## meaning 
+        ## 1. passed by reference
+        ## 2. address is taken (C & operator)
+        ## 3. accessed from nested function
+        Escape* = bool 
 
+        ## interface that architecture-dependent frame impl must support. 
+        Frame* = concept x, var vf, type F
+                newFrame(Label, seq[Escape]) is F
+                name(x) is Label
+                formals(x): seq[Access]
+                ## second parameter means whether parameter escapes.
+                allocLocal(vf, Escape): Access
