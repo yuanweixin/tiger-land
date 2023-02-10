@@ -6,8 +6,6 @@ import translate
 import sets
 import strutils
 import hashes
-import temp
-import frame
 
 var typeTagCounter = 0
 # A new tag is assigned to each array/record declaration.
@@ -136,14 +134,14 @@ type
     EnvEntryKind* = enum
         VarEntry
         FunEntry
-    EnvEntry* = object
+    EnvEntry*[T: Frame] = object
         case kind*: EnvEntryKind
         of VarEntry:
-            access: translate.Access
+            access: Access[T]
             ty*: Type
             readonly*: bool
         of FunEntry:
-            level*: Level
+            level*: Level[T]
             label*: Label
             formals*: seq[Type]
             result*: Type
@@ -156,7 +154,7 @@ type
 #   in b+a
 # end
 type TEnv = SymTab[Type]
-type VEnv = SymTab[EnvEntry]
+type VEnv[T: Frame] = SymTab[EnvEntry[T]]
 
 type ExpTy = (TranslatedExp, Type)
 
@@ -167,32 +165,30 @@ proc newBaseTEnv(): TEnv =
     result.enter symbol "string", StringTy
 
 
-proc newBaseVEnv(): Venv =
+proc newBaseVEnv[T: Frame](): Venv[T] =
     result.beginScope()
     ## the built-in vars and functions
-    result.enter symbol "print", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "print", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: StringT)], result: UnitTy)
-    result.enter symbol "flush", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "flush", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[], result: UnitTy)
-    result.enter symbol "getchar", EnvEntry(kind: FunEntry,
-            level: outerMostLevel, label: newLabel(), formals: @[],
-
-result: StringTy)
-    result.enter symbol "ord", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "getchar", EnvEntry[T](kind: FunEntry,
+            level: outerMostLevel[T](), label: newLabel(), formals: @[],result: StringTy)
+    result.enter symbol "ord", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: StringT)], result: IntTy)
-    result.enter symbol "chr", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "chr", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: IntT)], result: StringTy)
-    result.enter symbol "size", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "size", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: StringT)], result: IntTy)
-    result.enter symbol "substring", EnvEntry(kind: FunEntry,
-            level: outerMostLevel, label: newLabel(), formals: @[Type(
+    result.enter symbol "substring", EnvEntry[T](kind: FunEntry,
+            level: outerMostLevel[T](), label: newLabel(), formals: @[Type(
                     kind: StringT), IntTy, IntTy], result: StringTy)
-    result.enter symbol "concat", EnvEntry(kind: FunEntry,
-            level: outerMostLevel, label: newLabel(), formals: @[Type(
+    result.enter symbol "concat", EnvEntry[T](kind: FunEntry,
+            level: outerMostLevel[T](), label: newLabel(), formals: @[Type(
                     kind: StringT), StringTy], result: StringTy)
-    result.enter symbol "not", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "not", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: IntT)], result: IntTy)
-    result.enter symbol "exit", EnvEntry(kind: FunEntry, level: outerMostLevel,
+    result.enter symbol "exit", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: IntT)], result: UnitTy)
 
 proc errorDedup(ty: Type, hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
@@ -206,10 +202,10 @@ proc error(hasErr: var bool, pos: int, msg: varargs[string, `$`]) =
     echo pos, " ", msg.join("")
 
 
-proc transExp*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+proc transExp*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], tenv: var TEnv,
         e: absyn.Exp, loopContext: bool): ExpTy
 
-proc transVar*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+proc transVar*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], tenv: var TEnv,
         v: absyn.VarR, loopContext: bool): ExpTy =
     result =
         case v.kind
@@ -251,13 +247,13 @@ proc transVar*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 else:
                     (42, tyLhs.ty)
 
-proc transDec*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], tenv: var TEnv,
         d: absyn.Dec, loopContext: bool)
 
 func typesCompatible(a, b: Type): bool =
     return a == b or (a.kind, b.kind) in [(NilT, RecordT), (RecordT, NilT)]
 
-proc transExp*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+proc transExp*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], tenv: var TEnv,
         e: absyn.Exp, loopContext: bool): ExpTy =
     # note: the case statement uses implicit return
     # so that we force the compiler to check there
@@ -467,7 +463,10 @@ proc transExp*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                 err = true
                 errorDedup tyhi, hasErr, e.fpos, "hi of for range must be integer"
             venv.beginScope()
-            venv.enter(e.fvar, EnvEntry(kind: VarEntry, ty: Type(
+            
+            # TODO escape analysis
+            let acc = level.allocLocal(true)
+            venv.enter(e.fvar, EnvEntry[T](kind: VarEntry, ty: Type(
                     kind: IntT), readonly: true))
             let (_, tyfbody) = transExp(level, hasErr, venv, tenv, e.fbody, true)
             venv.endScope()
@@ -594,7 +593,7 @@ proc fixup(hasErr: var bool, tenv: var TEnv, tofix: var Type, pos: pos) =
             doAssert tofix.kind == ErrorT, "bug in impl, expecting only ErrorT to show in the else branch of case statement for fixing up missing types."
         discard # ErrorT could show up here.
 
-proc transDec*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
+proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], tenv: var TEnv,
         d: absyn.Dec, loopContext: bool) =
     case d.kind
     of TypeDec: # seq[type id eq ty] 
@@ -662,13 +661,22 @@ proc transDec*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
                         restyOpt.get
 
             var formals: seq[Type]
+
+
+            # TODO implement escape calculation
+            var escapes : seq[bool]
             for field in fundec.params:
                 let fieldTyOpt = tenv.look field.typ
                 if fieldTyOpt.isNone:
                     formals.add ErrorTy
                 else:
                     formals.add fieldTyOpt.get
-            var funentry = EnvEntry(kind: FunEntry, formals: formals, result: retTy)
+
+                # TODO implement escape analysis.
+                escapes.add true 
+
+            let newlevel = newLevel(parent=level, name=newLabel(), formals=escapes)
+            var funentry = EnvEntry[T](kind: FunEntry, level: newlevel, label: newLabel(), formals: formals, result: retTy)
 
             venv.enter fundec.name, funentry
 
@@ -678,11 +686,11 @@ proc transDec*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             var i = 0
             venv.beginScope()
             while i < fundec.params.len:
-                let varEntry = EnvEntry(kind: VarEntry, ty: funentry.formals[i])
+                let varEntry = EnvEntry[T](kind: VarEntry, ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i
-            # increase the level for the function body.
-            let (_, tyRes) = transExp(level + 1, hasErr, venv, tenv,
+            
+            let (_, tyRes) = transExp(funentry.level, hasErr, venv, tenv,
                     fundec.body, false)
             if not typesCompatible(funentry.result, tyRes) and
                     funentry.result.kind != ErrorT and tyRes.kind != ErrorT:
@@ -696,28 +704,28 @@ proc transDec*(level: Level, hasErr: var bool, venv: var VEnv, tenv: var TEnv,
             let retTyOpt = tenv.look retTypeSym
             if retTyOpt.isNone:
                 error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
-                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
+                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
             elif not typesCompatible(tyExp, retTyOpt.get):
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
-                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
+                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
             else:
-                venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: retTyOpt.get)
+                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
             errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name,
                     " is declared with unknown type and initialized with nil. Fix by using the long form, e.g. var ",
                     d.vdname.name, " : <my_type> = ..."
-            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: ErrorTy)
+            venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
         else:
             # no return type specified. infer it from the initializer.
-            venv.enter d.vdname, EnvEntry(kind: VarEntry, ty: tyExp)
+            venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: tyExp)
 
-proc transProg*(ast: Exp): Option[TranslatedExp] =
+proc transProg*[T: Frame](ast: Exp): Option[TranslatedExp] =
     var baseTEnv = newBaseTEnv()
-    var baseVEnv = newBaseVEnv()
+    var baseVEnv = newBaseVEnv[T]()
     ## return whether there was type errors.
     var hasErr = false
-    let (texp, _) = transExp(outerMostLevel, hasErr, baseVEnv, baseTEnv, ast,
+    let (texp, _) = transExp[T](outerMostLevel[T](), hasErr, baseVEnv, baseTEnv, ast,
             loopContext = false)
     if hasErr:
         return none[TranslatedExp]()

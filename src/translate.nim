@@ -1,20 +1,33 @@
 import temp
 import frame
+export temp
+export frame.Frame
 
 type TranslatedExp* = int
 
-type Level* = int
+type 
+    LevelKind* = enum
+        Top 
+        Nested
+    Level*[T: Frame] = ref object
+        case kind* : LevelKind 
+        of Top: discard
+        of Nested:
+            parent*: Level[T]
+            frame* : T 
+    Access*[T: Frame] = (Level[T], frame.Access)
 
-type Access* = (Level, frame.Access)
+proc outerMostLevel*[T: Frame](): Level[T] = 
+    return Level[T](kind: Top)
 
-const outerMostLevel*: Level = -1
+proc newLevel*[T: Frame](parent: Level[T], name: Label, formals: seq[Escape]): Level[T] =
+    return Level[T](kind: Nested, parent: parent, frame: T.newFrame(name, formals))
 
-proc newLevel*(parent: Level, name: Label, formals: seq[bool]): Level =
+proc formals*[T: Frame](level: Level[T]): seq[Access[T]] =
+    doAssert level.kind == Nested, "invalid usage, formals only available in nested level"
+    result.add (level, level.frame.formals)
 
-    return parent + 1
-
-proc formals*(level: Level): seq[Access] =
-    discard
-
-proc allocLocal*(level: Level, escape: bool): Access =
-    discard
+proc allocLocal*[T: Frame](level: Level[T], escape: bool): Access[T] =
+    doAssert level.kind != Top, "cannot allocate locals in the top context"
+    let frameAcc = level.frame.allocLocalInFrame(escape)
+    return (level, frameAcc)

@@ -9,7 +9,7 @@ type
                 case kind*: AccessKind
                 of InFrame:
                         ## indicates mem loc at offset x from frame pointer
-                        frame*: int
+                        offset*: int
                 of InReg:
                         ## Indicates an abstract register 
                         reg*: Temp
@@ -23,8 +23,7 @@ type
 
         ## interface that architecture-dependent frame impl must support. 
         Frame* = concept x, var vf, type F
-                newFrame(Label, seq[Escape]) is F
+                F.newFrame(Label, seq[Escape]) is F
                 name(x) is Label
-                formals(x): seq[Access]
-                ## second parameter means whether parameter escapes.
-                allocLocal(vf, Escape): Access
+                formals(x) is seq[Access]
+                vf.allocLocalInFrame(Escape) is Access

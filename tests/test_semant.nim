@@ -4,6 +4,9 @@ import semant
 import parse
 import options
 import os
+import frame
+import ../src/frame/x86_ia64
+import translate
 
 test "appel tiger test programs good":
     for f in walkFiles("tests/tiger_test_programs/semant/good/*"):
@@ -11,7 +14,7 @@ test "appel tiger test programs good":
         var input = readFile(f)
         let astOpt = parseString(input)
         doAssert astOpt.isSome
-        let texpOpt = transProg(astOpt.get)
+        let texpOpt = transProg[X86IA64Frame](astOpt.get)
         doAssert texpOpt.isSome, f
 
 test "appel tiger test programs bad":
@@ -20,9 +23,8 @@ test "appel tiger test programs bad":
         var input = readFile(f)
         let astOpt = parseString(input)
         doAssert astOpt.isSome
-        let texpOpt = transProg(astOpt.get)
+        let texpOpt = transProg[X86IA64Frame](astOpt.get)
         doAssert texpOpt.isNone, f
-
 
 test "Type ==":
     var x, y: semant.Type
@@ -38,10 +40,10 @@ test "$ Symtab[Type]":
     discard $st
 
 test "$ Symtab[EnvEntry]":
-    var st = newSymtab[EnvEntry]()
+    var st = newSymtab[EnvEntry[X86IA64Frame]]()
     st.beginScope()
     for i in 0..100:
-        st.enter symbol $i, EnvEntry(kind: VarEntry, ty: Type(kind: ErrorT))
+        st.enter symbol $i, EnvEntry[X86IA64Frame](kind: VarEntry, ty: Type(kind: ErrorT))
     discard $st
 
 test "var a := nil fails type check":
@@ -51,7 +53,7 @@ test "var a := nil fails type check":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     if texpOpt.isSome:
         echo "unexpected, textOpt.get is ", texpOpt.get
     check texpOpt.isNone
@@ -71,7 +73,7 @@ test "nil valid cases in appendix":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "record a{f1=nil,...} works":
@@ -83,7 +85,7 @@ test "record a{f1=nil,...} works":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "if...then... can both return nil":
@@ -94,7 +96,7 @@ test "if...then... can both return nil":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "if...then..., if returns RecordT, then returns nil":
@@ -106,7 +108,7 @@ test "if...then..., if returns RecordT, then returns nil":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "if...then..., if returns nil, then returns RecordT":
@@ -118,7 +120,7 @@ test "if...then..., if returns nil, then returns RecordT":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "function a() : some_record = ... where body returns nil":
@@ -130,7 +132,7 @@ test "function a() : some_record = ... where body returns nil":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "function a() = () should be accepted":
@@ -141,7 +143,7 @@ test "function a() = () should be accepted":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "for loop counter cannot be assigned to":
@@ -152,7 +154,7 @@ test "for loop counter cannot be assigned to":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isNone
 
 test "records same but separate decls are distinct types":
@@ -166,7 +168,7 @@ test "records same but separate decls are distinct types":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isNone
 
 test "arrays same but separate decls are distinct types":
@@ -180,7 +182,7 @@ test "arrays same but separate decls are distinct types":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isNone
 
 test "local redeclarations, appendix example":
@@ -200,7 +202,7 @@ test "local redeclarations, appendix example":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "break not in while/for fails":
@@ -211,7 +213,7 @@ test "break not in while/for fails":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isNone
 
 test "break in a while loop is legal":
@@ -223,7 +225,7 @@ test "break in a while loop is legal":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "break in a for loop is legal":
@@ -235,7 +237,7 @@ test "break in a for loop is legal":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
 test "standard library calls":
@@ -255,6 +257,6 @@ test "standard library calls":
     end"""
     let astOpt = parseString(source)
     check astOpt.isSome
-    let texpOpt = transProg(astOpt.get)
+    let texpOpt = transProg[X86IA64Frame](astOpt.get)
     check texpOpt.isSome
 
