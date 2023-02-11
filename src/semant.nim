@@ -466,8 +466,7 @@ proc transExp*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             
             # TODO escape analysis
             let acc = level.allocLocal(true)
-            venv.enter(e.fvar, EnvEntry[T](kind: VarEntry, ty: Type(
-                    kind: IntT), readonly: true))
+            venv.enter(e.fvar, EnvEntry[T](kind: VarEntry, access: acc, ty: Type(kind: IntT), readonly: true))
             let (_, tyfbody) = transExp(level, hasErr, venv, tenv, e.fbody, true)
             venv.endScope()
 
@@ -686,7 +685,9 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             var i = 0
             venv.beginScope()
             while i < fundec.params.len:
-                let varEntry = EnvEntry[T](kind: VarEntry, ty: funentry.formals[i])
+                # TODO escape analysis
+                let acc = level.allocLocal(true)
+                let varEntry = EnvEntry[T](kind: VarEntry, access: acc, ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i
             
@@ -704,13 +705,15 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             let retTyOpt = tenv.look retTypeSym
             if retTyOpt.isNone:
                 error hasErr, pos, "Return type ", retTyOpt.get, " is unknown"
-                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
+                venv.enter d.vdname, EnvEntry[T](kind: VarEntry,  ty: ErrorTy)
             elif not typesCompatible(tyExp, retTyOpt.get):
                 error hasErr, pos, "Return type of ", retTyOpt.get,
                         " does not match actual type of initializer, ", tyExp
                 venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
             else:
-                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: retTyOpt.get)
+                # TODO escape analysis
+                let acc = level.allocLocal(true)
+                venv.enter d.vdname, EnvEntry[T](kind: VarEntry, access: acc, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
             errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name,
                     " is declared with unknown type and initialized with nil. Fix by using the long form, e.g. var ",
@@ -718,15 +721,17 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
         else:
             # no return type specified. infer it from the initializer.
-            venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: tyExp)
+            # TODO escape analysis
+            let acc = level.allocLocal(true)
+            venv.enter d.vdname, EnvEntry[T](kind: VarEntry, access: acc, ty: tyExp)
 
 proc transProg*[T: Frame](ast: Exp): Option[TranslatedExp] =
     var baseTEnv = newBaseTEnv()
     var baseVEnv = newBaseVEnv[T]()
     ## return whether there was type errors.
     var hasErr = false
-    let (texp, _) = transExp[T](outerMostLevel[T](), hasErr, baseVEnv, baseTEnv, ast,
-            loopContext = false)
+    # allocate the main program frame! 
+    let (texp, _) = transExp[T](outerMostLevel[T]().newLevel(name= newLabel(), formals = @[]), hasErr, baseVEnv, baseTEnv, ast,  loopContext = false)
     if hasErr:
         return none[TranslatedExp]()
     return some[TranslatedExp](texp)
