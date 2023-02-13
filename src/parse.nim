@@ -339,7 +339,7 @@ nimy tigerParser[Token]:
         For Id Assign exp To exp Do exp:
             return Exp(kind: ForExp,
                         fvar: symbol ($2).val,
-                        escape: true,
+                        escape: false,
                         lo: $4,
                         hi: $6,
                         fbody: $8,
@@ -400,11 +400,11 @@ nimy tigerParser[Token]:
             return $1
     field_complex[seq[Field]]:
         Id Colon Id:
-            return @[Field(name: symbol ($1).val, escape: true, typ: symbol (
+            return @[Field(name: symbol ($1).val, escape: false, typ: symbol (
                     $3).val, pos: nimyacctree.getStartPos(2))]
         field_complex Comma Id Colon Id:
             var fl = $1
-            fl.add Field(name: symbol ($3).val, escape: true, typ: symbol (
+            fl.add Field(name: symbol ($3).val, escape: false, typ: symbol (
                     $5).val, pos: nimyacctree.getStartPos(4))
             return fl
     sequence[Exp]:
@@ -442,7 +442,7 @@ nimy tigerParser[Token]:
         Var Id type_opt Assign exp:
             return Dec(kind: VarDec,
                 vdname: symbol ($2).val,
-                escape: true,
+                escape: false,
                 vdtyp: $3,
                 init: $5,
                 vdpos: nimyacctree.getStartPos(1))

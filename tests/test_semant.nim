@@ -6,17 +6,27 @@ import options
 import os
 import frame
 import translate
+import escape
+import print
+import absyn
 
 type TestFrame* = object
+    name: Label
+    formals: seq[frame.Access]
 
 proc newFrame*(x: typedesc[TestFrame], name: Label, formals: seq[Escape]): TestFrame =
-    discard
+    result.name = name 
+    for escape in formals:
+        if escape:
+            result.formals.add frame.Access(kind: InFrame, offset: 42)
+        else:
+            result.formals.add frame.Access(kind: InReg, reg: newTemp())            
 
 proc name*(f: TestFrame): Label =
-    discard
+    return f.name
 
 proc formals*(f: TestFrame): seq[frame.Access] =
-    discard
+    return f.formals
 
 proc allocLocalInFrame*(vf: var TestFrame, escapes: Escape): frame.Access =
     discard
@@ -318,4 +328,172 @@ test "circular nonself through record ok":
     end"""
     testInputIsGood source
 
+test "redeclaration":
+    let source = """
+    let 
+        var i := 1
+        var i := 2 /* i above irrelevant for escape analysis */
+        var k := 3
+        /* function i's scope effectively at start of recursive blk */
+        function j () = 
+            (i();
+            k + 1;
+            ())
+        function i () = 
+            (2;
+            ())
+        var i := 4 
+        function j () : int = 
+            i + 1  /* i escapes here */
+    in 
+    end
+    """
+    testInputIsGood source
 
+test "fundec block shadow var name":
+    let source = """
+    let
+        var i := 1 
+        function j () = 
+            i := 2 /* this is illegal because i is a func */
+        function i () =  /* i defined as func at start of j */
+            ()
+    in 
+    end
+    """
+    testInputIsBad source
+
+test "escape simple":
+    let source = """
+    let
+        var i := 1 
+        function j () = 
+            i := 2 
+    in 
+        let 
+            function k() = 
+                i := 3
+        in 
+        end
+    end
+    """
+    let astOpt = parseString(source)
+    doAssert astOpt.isSome
+    let ast = astOpt.get
+    check ast.decs[0].escape == false
+    ast.findEscape
+    check ast.decs[0].escape == true 
+    testInputIsGood source
+
+test "escape var get redeclared as function":
+    let source = """
+    let
+        var i := 1 
+        function j () = 
+            i()
+        function i () = 
+            ()
+    in 
+    end
+    """
+    let astOpt = parseString(source)
+    doAssert astOpt.isSome
+    let ast = astOpt.get
+    check ast.decs[0].escape == false
+    ast.findEscape
+    check ast.decs[0].escape == false
+    testInputIsGood source
+
+test "escape var gets redeclared":
+    let source = """
+    let
+        var i := 1 /* get shadowed so shouldn't move */
+        var i := 2 /* i escapes */
+        function j () = 
+            i := 3 
+        var i := 4 /* this is fresh and shouldn't escape */
+        var j := 5  /* gets used later */
+    in 
+        let 
+            function x() = 
+                j := 42 
+        in
+        end
+    end
+    """
+    let astOpt = parseString(source)
+    doAssert astOpt.isSome
+    let ast = astOpt.get
+    check ast.decs[0].escape == false
+    check ast.decs[1].escape == false
+    check ast.decs[3].escape == false
+    check ast.decs[4].escape == false
+    ast.findEscape
+    check ast.decs[0].escape == false
+    check ast.decs[1].escape == true
+    check ast.decs[3].escape == false
+    check ast.decs[4].escape == true
+    testInputIsGood source
+
+test "for variable escapes":
+    let source = """
+    let
+        function x() = 
+            for i := 1 to 100 
+            do
+                let 
+                    function j () : int = 
+                        i + 1 
+                    var i := 2 /* redeclare */ 
+                    var k := 0 
+                    function j () : int = 
+                        i + 1  /* this now affects the inner i */
+                in 
+                end
+    in
+    end
+    """
+    let astOpt = parseString(source)
+    doAssert astOpt.isSome
+    let ast = astOpt.get
+    check ast.decs[0].fundecs[0].body.escape == false
+    check ast.decs[0].fundecs[0].body.fbody.decs[1].escape == false # inner i 
+    check ast.decs[0].fundecs[0].body.fbody.decs[2].escape == false # k 
+    ast.findEscape
+    check ast.decs[0].fundecs[0].body.escape == true
+    check ast.decs[0].fundecs[0].body.fbody.decs[1].escape == true # inner i 
+    check ast.decs[0].fundecs[0].body.fbody.decs[2].escape == false # k 
+    testInputIsGood source
+
+test "for lo, hi does not affect escape of for loop var":
+    let source = """
+    let
+        var i:= 1 
+        function x() = 
+            for i := let function j() = i:= 1 in 1 end to let function j() = i:= 1 in 100 end 
+            do
+                ()
+    in
+    end
+    """
+    let astOpt = parseString(source)
+    doAssert astOpt.isSome
+    let ast = astOpt.get
+    check ast.decs[0].escape == false # outer i 
+    check ast.decs[1].fundecs[0].body.escape == false # for loop i 
+    ast.findEscape
+    check ast.decs[0].escape == true # outer i 
+    check ast.decs[1].fundecs[0].body.escape == false # for loop i 
+    testInputIsGood source
+
+test "for loop bad input to access for loop var in lo or hi":
+    let source = """
+    let
+        function x() = 
+            for i :=  let function j() = i:= 1 in 1 end to let function j() = i:= 100 in 100 end 
+            do
+                ()
+    in 
+    end
+    """
+    testInputIsBad source

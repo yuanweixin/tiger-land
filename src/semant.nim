@@ -6,6 +6,7 @@ import translate
 import sets
 import strutils
 import hashes
+import escape
 
 var typeTagCounter = 0
 # A new tag is assigned to each array/record declaration.
@@ -15,7 +16,7 @@ proc newTypeTag(): int =
     result = typeTagCounter
     inc typeTagCounter
 
-type TypeKind* = enum
+type TypeKind* {.pure.} = enum
     RecordT
     NilT
     IntT
@@ -113,31 +114,14 @@ func `==`*(a, b: Type): bool =
     else:
         return true
 
-# TODO do this after adding the fn level and allocating location for local vars
-# data types for computing escape.
-# type Depth = int
-# type EscEnv = Symtab[(Depth, bool)]
-
-# proc findEscapeVar(env: EscEnv, d: Depth, s: VarR) =
-#     discard
-
-# proc findEscapeExp(env: EscEnv, d: Depth, s: Exp) =
-#     discard
-
-# proc findEscapeDecs(env: EscEnv, d: Depth, s: seq[Dec]) =
-#     discard
-
-# proc findEscape(exp: Exp) =
-#     discard
-
 type
-    EnvEntryKind* = enum
+    EnvEntryKind* {.pure.} = enum
         VarEntry
         FunEntry
     EnvEntry*[T: Frame] = object
         case kind*: EnvEntryKind
         of VarEntry:
-            access: Access[T]
+            access*: Access[T]
             ty*: Type
             readonly*: bool
         of FunEntry:
@@ -160,6 +144,7 @@ type ExpTy = (TranslatedExp, Type)
 
 proc newBaseTEnv(): TEnv =
     result.beginScope()
+    
     ## the built-in types
     result.enter symbol "int", IntTy
     result.enter symbol "string", StringTy
@@ -167,6 +152,7 @@ proc newBaseTEnv(): TEnv =
 
 proc newBaseVEnv[T: Frame](): Venv[T] =
     result.beginScope()
+    
     ## the built-in vars and functions
     result.enter symbol "print", EnvEntry[T](kind: FunEntry, level: outerMostLevel[T](),
             label: newLabel(), formals: @[Type(kind: StringT)], result: UnitTy)
@@ -213,6 +199,18 @@ proc transVar*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             let tyOpt = venv.look v.svs
             if tyOpt.isNone:
                 error hasErr, v.svp, "use of undeclared variable ", v.svs.name
+                (42, ErrorTy)
+            elif tyOpt.get.kind == FunEntry:
+                # in the current version of tiger 
+                # SimpleVar can occur in
+                # 1. id
+                # 2. id.id
+                # 3. subscripts
+                # and in none of these contexts is function supported. 
+                # this scenario happens when function shadows
+                # the var definition, then it is used in a 
+                # context that expects a var. 
+                error hasErr, v.svp, "variable expected but got a function"
                 (42, ErrorTy)
             else:
                 (42, tyOpt.get.ty)
@@ -462,12 +460,13 @@ proc transExp*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             if tyhi.kind != IntT:
                 err = true
                 errorDedup tyhi, hasErr, e.fpos, "hi of for range must be integer"
+
             venv.beginScope()
-            
-            # TODO escape analysis
-            let acc = level.allocLocal(true)
+
+            let acc = level.allocLocal(e.escape)
             venv.enter(e.fvar, EnvEntry[T](kind: VarEntry, access: acc, ty: Type(kind: IntT), readonly: true))
             let (_, tyfbody) = transExp(level, hasErr, venv, tenv, e.fbody, true)
+
             venv.endScope()
 
             if tyfbody.kind != UnitT:
@@ -486,11 +485,14 @@ proc transExp*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
         of LetExp:
             tenv.beginScope
             venv.beginScope
+            
             for dec in e.decs:
                 transDec(level, hasErr, venv, tenv, dec, loopContext)
             let (_, tyExp) = transExp(level, hasErr, venv, tenv, e.letbody, loopContext)
+            
             tenv.endScope
             venv.endScope
+            
             (42, tyExp)
         of ArrayExp: # Id Lbrack exp Rbrack Of exp:
             # is this array type declared?
@@ -660,9 +662,6 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
                         restyOpt.get
 
             var formals: seq[Type]
-
-
-            # TODO implement escape calculation
             var escapes : seq[bool]
             for field in fundec.params:
                 let fieldTyOpt = tenv.look field.typ
@@ -670,10 +669,8 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
                     formals.add ErrorTy
                 else:
                     formals.add fieldTyOpt.get
-
-                # TODO implement escape analysis.
-                escapes.add true 
-
+                escapes.add field.escape 
+                
             let newlevel = newLevel(parent=level, name=newLabel(), formals=escapes)
             var funentry = EnvEntry[T](kind: FunEntry, level: newlevel, label: newLabel(), formals: formals, result: retTy)
 
@@ -683,10 +680,12 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
         for fundec in d.fundecs:
             let funentry = (venv.look fundec.name).get
             var i = 0
+
             venv.beginScope()
+            
             while i < fundec.params.len:
-                # TODO escape analysis
-                let acc = level.allocLocal(true)
+                let escape = fundec.params[i].escape
+                let acc = level.allocLocal(escape)
                 let varEntry = EnvEntry[T](kind: VarEntry, access: acc, ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i
@@ -697,6 +696,7 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
                     funentry.result.kind != ErrorT and tyRes.kind != ErrorT:
                 error hasErr, fundec.pos, "expected return type of ",
                         funentry.result, " for function but got ", tyRes
+            
             venv.endScope()
     of VarDec: # Var Id type_opt Assign exp:
         let (_, tyExp) = transExp(level, hasErr, venv, tenv, d.init, loopContext)
@@ -711,8 +711,7 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
                         " does not match actual type of initializer, ", tyExp
                 venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
             else:
-                # TODO escape analysis
-                let acc = level.allocLocal(true)
+                let acc = level.allocLocal(d.escape)
                 venv.enter d.vdname, EnvEntry[T](kind: VarEntry, access: acc, ty: retTyOpt.get)
         elif tyExp.kind == NilT:
             errorDedup tyExp, hasErr, d.vdpos, "Variable ", d.vdname.name,
@@ -721,8 +720,7 @@ proc transDec*[T: Frame](level: Level[T], hasErr: var bool, venv: var VEnv[T], t
             venv.enter d.vdname, EnvEntry[T](kind: VarEntry, ty: ErrorTy)
         else:
             # no return type specified. infer it from the initializer.
-            # TODO escape analysis
-            let acc = level.allocLocal(true)
+            let acc = level.allocLocal(d.escape)
             venv.enter d.vdname, EnvEntry[T](kind: VarEntry, access: acc, ty: tyExp)
 
 proc transProg*[T: Frame](ast: Exp): Option[TranslatedExp] =
@@ -730,8 +728,13 @@ proc transProg*[T: Frame](ast: Exp): Option[TranslatedExp] =
     var baseVEnv = newBaseVEnv[T]()
     ## return whether there was type errors.
     var hasErr = false
+
+    # do escape analysis before everything else. 
+    # it mutates the `escape` field in relevant Exp nodes. 
+    ast.findEscape
+
     # allocate the main program frame! 
-    let (texp, _) = transExp[T](outerMostLevel[T]().newLevel(name= newLabel(), formals = @[]), hasErr, baseVEnv, baseTEnv, ast,  loopContext = false)
+    let (texp, _) = transExp[T](outerMostLevel[T]().newLevel(name= newLabel(), formals = @[]), hasErr, baseVEnv, baseTEnv, ast, loopContext = false)
     if hasErr:
         return none[TranslatedExp]()
     return some[TranslatedExp](texp)

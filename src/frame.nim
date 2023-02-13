@@ -1,7 +1,7 @@
 import temp
 
 type
-        AccessKind* = enum
+        AccessKind* {.pure.} = enum
                 InFrame 
                 InReg
 

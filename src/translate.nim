@@ -6,7 +6,7 @@ export frame.Frame
 type TranslatedExp* = int
 
 type 
-    LevelKind* = enum
+    LevelKind* {.pure.} = enum
         Top 
         Nested
     Level*[T: Frame] = ref object
@@ -25,7 +25,8 @@ proc newLevel*[T: Frame](parent: Level[T], name: Label, formals: seq[Escape]): L
 
 proc formals*[T: Frame](level: Level[T]): seq[Access[T]] =
     doAssert level.kind == Nested, "invalid usage, formals only available in nested level"
-    result.add (level, level.frame.formals)
+    for formal in level.frame.formals:
+        result.add (level, formal)
 
 proc allocLocal*[T: Frame](level: Level[T], escape: bool): Access[T] =
     doAssert level.kind != Top, "cannot allocate locals in the top context"

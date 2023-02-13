@@ -9,7 +9,7 @@ import frame
 
 const version = "0.3.0"
 
-type Arch = enum
+type Arch {.pure.} = enum
     x86ia32
     x86ia64
 

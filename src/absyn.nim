@@ -4,7 +4,7 @@ import options
 type
     pos* = int
 
-    VarKind* = enum
+    VarKind* {.pure.} = enum
         SimpleVar
         FieldVar
         SubscriptVar
@@ -23,7 +23,7 @@ type
             exp*: Exp
             pos*: pos
 
-    ExpKind* = enum
+    ExpKind* {.pure.} = enum
         VarExp
         NilExp
         IntExp
@@ -97,7 +97,7 @@ type
             size*: Exp
             init*: Exp
             arrpos*: pos
-    DecKind* = enum
+    DecKind* {.pure.} = enum
         FunctionDec
         VarDec
         TypeDec
@@ -118,7 +118,7 @@ type
         tdname*: Symbol
         tdty*: Ty
         tdpos*: pos
-    TyKind* = enum
+    TyKind* {.pure.} = enum
         NameTy
         RecordTy
         ArrayTy
@@ -133,7 +133,7 @@ type
         of ArrayTy:
             arrs*: Symbol
             arrpos*: pos
-    Oper* = enum
+    Oper* {.pure.} = enum
         PlusOp
         MinusOp
         TimesOp
