@@ -9,6 +9,7 @@ import translate
 import escape
 import print
 import absyn
+import ir 
 
 type TestFrame* = object
     name: Label
@@ -29,7 +30,21 @@ proc formals*(f: TestFrame): seq[frame.Access] =
     return f.formals
 
 proc allocLocalInFrame*(vf: var TestFrame, escapes: Escape): frame.Access =
-    discard
+    frame.Access(kind:InReg, reg: newTemp())
+
+proc externalCall*(x: typedesc[TestFrame], y: string, z: seq[IrExp]) : IrExp =
+    Const(42)
+
+proc FP*(x: typedesc[TestFrame]) : temp.Temp = 
+    return temp.newTemp()
+
+proc wordSize*(x: typedesc[TestFrame]) : int = 
+    return 42
+
+proc exp*(x: typedesc[TestFrame], a: frame.Access, ir: IrExp) : IrExp = 
+    Const(42)
+
+proc procEntryExit1*(f: TestFrame, s: IrStm) : IrStm = s
 
 test "sanity check TestFrame is Frame":
     doAssert TestFrame is Frame

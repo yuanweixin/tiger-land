@@ -23,4 +23,4 @@ proc newLabel*(): Label =
     result = symbol("__label__" & $id)
 
 proc namedLabel*(name: string): Label =
-    result = symbol("__label__" & name)
+    result = symbol(name)

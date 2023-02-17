@@ -1,0 +1,1 @@
+const INVALID_ARRAY_INDEX* = -1 

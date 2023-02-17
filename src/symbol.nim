@@ -1,4 +1,5 @@
 import tables, options
+import dev
 
 type
     Symbol* = (string, int)
@@ -60,21 +61,17 @@ proc newSymtab*[T](): Symtab[T] =
     result = Symtab[T](tbl: initTable[Symbol, seq[T]](), stack: @[])
 
 proc enter*[T](symtab: var Symtab[T], sym: Symbol, binding: T) =
-    when defined(tigerdevel):
-        doAssert symtab.stack[0] == markerSym,
-                "missing beginScope() call on symtab\n" & $symtab
+    devAssert symtab.stack[0] == markerSym, "missing beginScope() call on symtab\n", symtab
     ## adds the given symbol to the symtab.
     if sym notin symtab.tbl:
         symtab.tbl[sym] = @[binding]
     else:
         symtab.tbl[sym].add binding
     symtab.stack.add sym
-    when defined(tigerdevel):
-        echo "entering symbol ", sym, " in symtab\n", symtab
+    devEcho "entering symbol ", sym, " in symtab\n", symtab
 
 proc look*[T](symtab: var Symtab[T], sym: Symbol): Option[T] =
-    when defined(tigerdevel):
-        echo "looking up symbol ", sym, " in symtab\n", symtab
+    devEcho "looking up symbol ", sym, " in symtab\n", symtab
     ## locate the last binding of the given symbol in the symtab.
     if sym in symtab.tbl:
         let bindings = symtab.tbl[sym]
@@ -84,19 +81,16 @@ proc look*[T](symtab: var Symtab[T], sym: Symbol): Option[T] =
     return none[T]()
 
 proc beginScope*[T](symtab: var Symtab[T]) =
-    when defined(tigerdevel):
-        echo "beginScope called on symtab\n", symtab
+    devEcho "beginScope called on symtab\n", symtab
     ## this must be called at start of scope before adding symbols
     symtab.stack.add markerSym
 
 proc endScope*[T](symtab: var Symtab[T]) =
-    when defined(tigerdevel):
-        echo "endScope called on symtab\n", symtab
+    devEcho "endScope called on symtab\n", symtab
     ## this must be called at the end of a scope to clean up that scope's symbols
     while symtab.stack[^1] != markerSym:
         let sym = symtab.stack.pop
-        when defined(tigerdevel):
-            echo "popped symbol ", sym
+        devEcho "popped symbol ", sym
         discard symtab.tbl[sym].pop()
     discard symtab.stack.pop
 
