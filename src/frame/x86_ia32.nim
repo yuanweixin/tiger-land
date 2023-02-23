@@ -31,7 +31,7 @@ proc name*(f: X86IA32Frame): Label =
 proc formals*(f: X86IA32Frame): seq[Access] =
     return f.formals
 
-proc allocLocalInFrame*(vf: var X86IA32Frame, escapes: bool): Access =
+proc allocLocal*(vf: var X86IA32Frame, escapes: bool): Access =
     if escapes:
         vf.locals.add Access(kind: InFrame, offset : vf.nextLocal)
         vf.nextLocal -= ws

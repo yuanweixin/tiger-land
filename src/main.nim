@@ -6,6 +6,9 @@ import options
 import os
 import print
 import frame
+import ./frame/x86_ia64
+import ./frame/x86_ia32
+import strutils
 
 const version = "0.3.0"
 
@@ -16,12 +19,10 @@ type Arch {.pure.} = enum
 proc help() = 
     echo "TODO help me"
 
-type TransX86IA64 = Translate[X86IA64Frame]
-
 proc main() =
     var filename = ""
     var dumpAst = false
-    var arch = x86ia64
+    var arch = Arch.x86ia64
     for kind, key, val in getopt():
         case kind
         of cmdArgument:
@@ -67,6 +68,7 @@ proc main() =
         system.quit(-1)
     else:
         echo "type checking finished."
+        print texpOpt
     system.quit(0)
 
 main()

@@ -708,8 +708,6 @@ proc transDec*[T](ctx: var TranslateCtx[T], level: Level[T], hasErr: var bool, v
             let formalsAccess = funentry.level.formals
             var i = 0
             while i < fundec.params.len:
-                # let escape = fundec.params[i].escape
-                # let acc = level.allocLocal(escape)
                 let varEntry = EnvEntry[T](kind: VarEntry, access: formalsAccess[i], ty: funentry.formals[i])
                 venv.enter fundec.params[i].name, varEntry
                 inc i

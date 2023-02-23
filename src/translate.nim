@@ -142,6 +142,9 @@ proc newLevel*[T](parent: Level[T], formals: seq[Escape]): Level[T] =
         augmented.add formal
     return Level[T](kind: Nested, parent: parent, frame: T.newFrame(newLabel(), augmented))
 
+func staticLink[T](level: Level[T]) : frame.Access = 
+    return level.frame.formals[0]
+
 proc formals*[T](level: Level[T]): seq[Access[T]] =
     ## called by semant to see the frame.Access of the function's formal params. 
     devAssert level.kind == Nested, "invalid usage, formals only available in nested level"
@@ -154,11 +157,8 @@ proc formals*[T](level: Level[T]): seq[Access[T]] =
 
 proc allocLocal*[T](level: Level[T], escape: bool): Access[T] =
     devAssert level.kind != Top, "cannot allocate locals in the top context"
-    let frameAcc = level.frame.allocLocalInFrame(escape)
+    let frameAcc = level.frame.allocLocal(escape)
     return (level, frameAcc)
-
-func staticLink[T](level: Level[T]) : frame.Access = 
-    return level.frame.formals[0]
 
 proc simpleVar*[T](access: Access, curLevel: Level[T]) : TrExp = 
     let finalLvl = access.getLevel

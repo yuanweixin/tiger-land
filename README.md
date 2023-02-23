@@ -9,13 +9,15 @@ tiger-land was a typo when I made the repo, but it sounds way cooler than tiger-
 - [x] 3 Parsing
 - [x] 4 Abstract syntax
 - [x] 5 Semantic analysis
-- [ ] 6 Activation records
-- [ ] 7 Translation to IR 
-- [ ] 8 Basic blocks and traces 
+- [x] 6 Activation records
+- [x] 7 Translation to IR 
+- [x] 8 Basic blocks and traces 
 - [ ] 9 Instruction selection
 - [ ] 10 Liveness analysis
 - [ ] 11 Register allocation
 - [ ] 12 Checkpoint 
+
+# Other topics
 - [ ] Dataflow analysis
 - [ ] Loop optimization
 - [ ] SSA
@@ -45,24 +47,33 @@ nim c -d:release src/main.nim
 
 TBD
 
-# Mini-review of the Nim language
+# Thoughts on using the Nim language
 Nim was chosen because 
-* I needed a hobby language that have good performance. 
-* The community seems small enough for me to have some impact in. I apparently like to use languages that aren't popular (e.g. F#, Ocaml, Haskell). 
+* I needed a hobby language that have performance profile close to C. 
 * I like whitespace significant syntax. 
-* I don't want to look at or write C++, hurts my eyes and I am not a masochist. 
-* Rust seems like a big hype train (riding on Mozilla name/resources and now corporate support) but I find the syntax ugly and the language feels almost as masochist as C++. I don't want to manually move variables. I think Nim is going in the right direction with (mostly) compiler generated moves and compile time ref counting. 
-* I am impressed at the caliber of core Nim devs. 
-* The community is fairly active. 
+* I don't want to look at or write C++. I am not a masochist. 
+* Rust looks promising but besides the default move semantics and enforced lifetime tracking, it doesn't feel particularly exciting to use (meh syntax). Otoh, traits look nice and I wish Nim has a proper support for interfaces (concepts are the closest thing but it's experimental and tooling for it is not great). 
 
-Overall, the Nim language has been a solid choice for this project. It has case objects which is more or less algebraic data type (with rough edge, like you can't use the same field name for different cases). For the most part the language gets out of the way and lets me get stuff done. There are rough edges but none serious enough that make me want to stop using it. 
+Overall, the Nim language has been a solid choice for this project. 
 
-Some rough edges include: 
-* experimental features don't always work, or have weird limitations. for example, code reordering doesn't support mutually recursive procs. The language creator said they are working on getting rid of that hacky solution and incorporating a proper one into the core lang itself. 
-* have to rely on some experimental features (caseStatementMacros) + addendum to the standard lib (fusion) for pattern matching, which I read is going to get revamped in some future RFC. 
-* metaprogramming gets painful if you are transforming input before generating code. 
-* I had to do compile time json serialization, and the built-in marshal module didn't work for my type, so I had to try a bunch of libraries. In the end I found I can use std/jsonutils, but before I reached that point I tried a bunch of BUGGY json libs out there. 
+Pros:
+* case objects are mostly like algebraic data types. 
+* syntax looks clean and very concise 
+* initially having to annotate everything feels annoying, but it makes the code very readable, no head scratching a week later wondering what the type of the function is.
+* language community is active and people do respond to questions on forum. 
+* language power to syntax is very high. 
+* has the usual systems language feature (assembly, c/c++ interop), although I haven't tried them to see what it's like. 
+* language is big, reminescent of c++, but mostly well thought out, and gives you _choices_ on how you write your software. it feels like designer respects your intelligence as a programmer. 
 
-Rough edges aside, Nim is definitely a hacker's language. It lets you build things. It doesn't prevent you from doing low-level stuff. You can get stuff done if you know what you are doing. It is orders of magnitude more terse and expressive than anything in the C family. The required type annotations also significantly aids code reading (no guessing what a parameter's type is like you might on a python codebase, or a ML one) and makes it super easy to grep for particular patterns during refactor. 
-
-I haven't had the need to do any C/C++ interops so far, so just taking people's words that it's supposed to be easy. Some day we will cross that bridge. 
+Cons:
+* experimental features are...experimental. lots of them, and docs never say which ones actually work properly. for example, code reordering doesn't support mutually recursive procs, and there's some rfc somewhere about replacing it. 
+* depending on how you look at it, this could be a pro, but when you encounter a rough edge, you need to temper your expectations, and there's (so far) always some workaround. 
+* lacks pattern matching built-in, but you can use caseStatementMacros, experimental feature...
+* concepts type checking done at instantiation site, and vscode tooling doesn't pick up errors. 
+* concepts are not well integrated into generics. if you define a concept in module A, have a bunch of implementations, have module B define some procs that take the concept, and B does not directly reference the implementations, then the concept requires static dispatching to compile, otherwise it complains about missing procs. 
+* procs with same name seem to shadow each other and compiler doesn't warn you
+* having to rely on some experimental features (caseStatementMacros, concepts) to do pattern matching, interfaces is shitty. 
+* metaprogramming gets real painful if you are trying to write some generic code. 
+* compile time computation is painfully slow. it can time out. then you have to offload it to external process. except it's also a pain to marshal/unmarshal data for that purpose. see next item. 
+* I had to do compile time json serialization, and the built-in marshal module didn't work for my type, so I had to try a bunch of libraries. In the end I found I can use std/jsonutils, but before I reached that point I tried a bunch of BUGGY-ass json libs out there. 
+* Lack of incremental compilation - anything that `import parse` ends up running the grammar generation again which takes many seconds. 

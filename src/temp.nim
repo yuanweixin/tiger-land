@@ -1,5 +1,6 @@
 import tables
 import symbol
+export symbol.name
 
 type
     Temp* = int

@@ -39,7 +39,7 @@ type
                 F.newFrame(Label, seq[Escape]) is F
                 name(x) is Label
                 formals(x) is seq[Access]
-                vf.allocLocalInFrame(Escape) is Access
+                vf.allocLocal(Escape) is Access
                 F.externalCall(string, seq[IrExp]) is IrExp
                 F.FP is temp.Temp ## frame pointer 
                 F.wordSize is int ## machine word size
@@ -58,3 +58,15 @@ type
                 # # 2. function body
                 # # 3. restore callee-save registers. 
                 x.procEntryExit1(IrStm) is IrStm
+
+# a default fallback, duck typing, necessary when the caller uses generics
+# and does not import the actual implementations. so this isn't really as 
+# modular as i like because of the duck typing but...better than shit not working. 
+proc name*(x: Frame) : Label = 
+        return x.name()
+
+proc formals*(x: Frame) : seq[Access] = 
+        return x.formals()
+
+proc allocLocal*(x: var Frame, e: Escape) : Access = 
+        return x.allocLocal(e)

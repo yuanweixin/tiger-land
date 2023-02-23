@@ -29,7 +29,7 @@ proc name*(f: TestFrame): Label =
 proc formals*(f: TestFrame): seq[frame.Access] =
     return f.formals
 
-proc allocLocalInFrame*(vf: var TestFrame, escapes: Escape): frame.Access =
+proc allocLocal*(vf: var TestFrame, escapes: Escape): frame.Access =
     frame.Access(kind:InReg, reg: newTemp())
 
 proc externalCall*(x: typedesc[TestFrame], y: string, z: seq[IrExp]) : IrExp =
@@ -512,3 +512,81 @@ test "for loop bad input to access for loop var in lo or hi":
     end
     """
     testInputIsBad source
+
+test "assignment to function call scalar result is invalid":
+    ## spec says lvalue is variables, proc params, fields of records, and
+    ## array elements. functions can return record or array type, but those
+    ## would be references to some block of memory, and assigning to that 
+    ## reference doesn't make the same sense as assigning to a var of 
+    ## array/record type. for other types, you are just returning a value, 
+    ## so it makes no sense to assign to those either. 
+    ## 
+    ## luckily, it's built into the syntax so we don't have to worry about 
+    ## that scenario. 
+    let source = """
+    let 
+        function x() : int = 
+            100 
+    in 
+        x() := 20 
+    end 
+    """
+    let astOpt = parseString(source)
+    # it doesn't let you assign to func call results. 
+    check astOpt.isNone
+
+test "assignment to function call array result is invalid":
+    let source = """
+    let 
+        type intArray = array of int 
+        function x() : intArray = 
+            intArray[8] of 0 
+        var t := intArray[8] of 0
+    in 
+        x() := t 
+    end 
+    """
+    let astOpt = parseString(source)
+    # it doesn't let you assign to func call results. 
+    check astOpt.isNone
+    
+
+test "assignment to function call record result is invalid":
+    let source = """
+    let 
+        type rec = {i : int}
+        function x() : rec = 
+            rec{i=42}
+        var t := rec{i=43}
+    in 
+        x() := t
+    end 
+    """
+    let astOpt = parseString(source)
+    # it doesn't let you assign to func call results. 
+    check astOpt.isNone
+
+test "functions returning array okay":
+    let source = """
+    let
+            type intArray = array of int 
+            function x() : intArray = 
+                intArray[7] of 9
+    in 
+    end
+    """
+    testInputIsGood source
+
+
+test "function returning record okay":
+    let source = """
+    let
+            type rec = {i: int}
+            function x() : rec = 
+                rec{i=42} 
+    in 
+    end
+    """
+    testInputIsGood source
+    
+
