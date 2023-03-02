@@ -57,6 +57,7 @@ I gave up on the language when I realized, concepts is a half-assed "feature" an
 
 Switching to Rust, as that language has escape velocity, has a future, is so much more user friendly (documentation for everything, super user friendly compiler error messages, linter, code formatter, and actually runs without a gc, unlike the weird shit Nim tries to pull off trying to pass off as a language for hard realtime systems but still use GC), and actually makes shared-memory threading so much easier. Nim has next to none documentation on how to do parallelism, because the people who know how to don't write documentation, and you are left to just figure shit out on your own. 
 
+This was fun for a bit until the language died under the interaction of its incoherent features and complexity. 
 
 Pros:
 * case objects are basically C tag unions. case statement on the basic case object kinds does check for exhaustiveness. 
