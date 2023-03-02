@@ -84,6 +84,6 @@ Cons:
 * there is no ecosystem. most libraries are 1 man projects and half-abandoned, bug-ridden pieces of shit. see above comment about json. 
 * lack of incremental compilation - anything that `import parse` ends up running the grammar generation again which takes many seconds. 
 * community initially looks active and kind of welcoming, but upon digging, you discover Nimskull fork, and the scathing complains from ex-communicated members who have a grudge against the core members. if so mature, why much drama? 
-* araq may be a competent language designer but he def is weak in type theory. why couldn't the type system support interfaces/protocols in some kind of bounded polymorphism? 
+* why couldn't the type system support interfaces/protocols in some kind of bounded polymorphism? 
 * to continue, the whole language dev process lacks structure and transparency. 
-* i don't see any effort to promote industry use. so this is doomed to be forever some language playground for araq that a few people find cool and use. 
+* i don't see any effort to promote industry use. so this is doomed to be forever some language playground for the language creator that a few people find cool and use. 
