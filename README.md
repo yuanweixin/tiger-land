@@ -1,6 +1,10 @@
 # About
 Implementation of the tiger language specified in Appel's "Modern Compiler Implementation in ML", in the Nim language. 
 
+# Status
+
+Abandoned to switch implementation language. Nim was not a good choice. It was fun for a while until it became a PITA to keep using. 
+
 # Naming
 tiger-land was a typo when I made the repo, but it sounds way cooler than tiger-lang, so I kept it. 
 
